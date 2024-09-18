@@ -6,29 +6,29 @@
 
     <!-- Configuration section starts -->
     <target name="compile.all" depends="clean.all">
-        <compile_applet APPLETSRC="${SOURCE_DIR}/notreprojet"/>
+        <compile_applet APPLETSRC="${SOURCE_DIR}/simon"/>
     </target>
 
     <target name="convert.all" depends="compile.all">
-        <convert_applet APPLETNAME="NotreProjet" APPLETAID="${APPLETAIDPREFIX}:0x10:0x01"
-                        PACKAGENAME="notreprojet" PACKAGEAID="${APPLETAIDPREFIX}:0x10" VERSION="1.0"/>
+        <convert_applet APPLETNAME="helloWorld" APPLETAID="${APPLETAIDPREFIX}:0x10:0x01"
+                        PACKAGENAME="simon" PACKAGEAID="${APPLETAIDPREFIX}:0x10" VERSION="1.0"/>
     </target>
 
     <target name="generatecap.all" depends="convert.all">
-        <generate_cap PACKAGENAMEUNPACKAGED="notreprojet" APPLETNAME="NotreProjet"/>
+        <generate_cap PACKAGENAMEUNPACKAGED="simon" APPLETNAME="helloWorld"/>
     </target>
 
     <target name="verifycap.all" depends="generatecap.all">
-        <verify_cap PACKAGENAMEUNPACKAGED="notreprojet" APPLETNAME="NotreProjet"
-                    ADDEXPFILES="${OUTPUT_DIR}/notreprojet/javacard/NotreProjet.exp"/>
+        <verify_cap PACKAGENAMEUNPACKAGED="simon" APPLETNAME="helloWorld"
+                    ADDEXPFILES="${OUTPUT_DIR}/simon/javacard/helloWorld.exp"/>
     </target>
 
     <target name="binarize.all.standard" depends="verifycap.all">
-        <generate_applet_bin_std PACKAGENAMEUNPACKAGED="notreprojet" APPLETNAME="NotreProjet"/>
+        <generate_applet_bin_std PACKAGENAMEUNPACKAGED="simon" APPLETNAME="helloWorld"/>
     </target>
 
     <target name="binarize.all.egate" depends="verifycap.all">
-        <generate_applet_bin_egate PACKAGENAMEUNPACKAGED="notreprojet" MODULENAME="NotreProjet"/>
+        <generate_applet_bin_egate PACKAGENAMEUNPACKAGED="simon" MODULENAME="helloWorld"/>
     </target>
 
     <!-- ======================================================== -->

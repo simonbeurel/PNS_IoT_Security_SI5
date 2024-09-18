@@ -1,4 +1,4 @@
-package notreprojet;
+package simon;
 
 import javacard.framework.Applet;
 import javacard.framework.ISO7816;
