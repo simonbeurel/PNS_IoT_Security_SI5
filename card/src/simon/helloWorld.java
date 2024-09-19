@@ -30,7 +30,6 @@ public class helloWorld extends Applet {
             case (byte) 0x40:
                 Util.arrayCopy(hello, (byte)0, buf, ISO7816.OFFSET_CDATA, (byte)12);
                 apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, (byte)12);
-
                 break;
             default:
                 // good practice: If you don't know the INStruction, say so:

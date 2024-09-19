@@ -1,32 +1,47 @@
 from smartcard.System import readers
-from smartcard.util import toHexString
+from smartcard.util import toHexString, toBytes
 
-# 1. Liste des lecteurs de carte disponibles
-r = readers()
-if len(r) == 0:
-    print("Aucun lecteur de carte trouvé.")
-    exit()
+def connect_card():
+    r = readers()
+    if len(r) == 0:
+        print("Aucun lecteur de carte détecté.")
+        return None
+    connection = r[0].createConnection()
+    print("Connexion au lecteur:", r[0])
+    connection.connect()
+    return connection
 
-# Sélectionner le premier lecteur de carte
-reader = r[0]
-print(f"Utilisation du lecteur : {reader}")
+def send_apdu(connection, apdu):
+    response, sw1, sw2 = connection.transmit(apdu)
+    print(f"Envoyé: {toHexString(apdu)}")
+    print(f"Reçu: {toHexString(response)} {hex(sw1)[2:].zfill(2)} {hex(sw2)[2:].zfill(2)}")
+    return response, sw1, sw2
 
-# 2. Connexion à la carte
-connection = reader.createConnection()
-connection.connect()
+def main():
+    connection = connect_card()
+    if not connection:
+        return
 
-# 3. Envoi de la commande APDU pour l'applet (par exemple 00 40 00 00 00)
-apdu = [0x00, 0x40, 0x00, 0x00, 0x00]  # CLA, INS, P1, P2, Lc (longueur des données)
+    # Sélectionner l'AID de l'applet installé
+    aid = toBytes("a0404142434445461001")  # AID sans l'instance
+    select_apdu = [0x00, 0xA4, 0x04, 0x00] + [len(aid)] + aid
+    response, sw1, sw2 = send_apdu(connection, select_apdu)
 
-# 4. Envoyer la commande APDU à la carte
-response, sw1, sw2 = connection.transmit(apdu)
+    if sw1 == 0x90 and sw2 == 0x00:
+        print("Applet sélectionné avec succès.")
 
-# 5. Afficher la réponse
-print(f"Réponse APDU : {toHexString(response)}")
-print(f"SW1 SW2 : {hex(sw1)} {hex(sw2)}")
+        # Envoyer la commande pour obtenir le message "Hello"
+        hello_apdu = [0x80, 0x40, 0x00, 0x00, 0x0c] # 0x0c est la longueur du message
+        response, sw1, sw2 = send_apdu(connection, hello_apdu)
 
-# SW1 SW2 == 0x9000 signifie succès
-if sw1 == 0x90 and sw2 == 0x00:
-    print("Succès !")
-else:
-    print("Erreur lors de la communication avec la carte.")
+        if sw1 == 0x90 and sw2 == 0x00:
+            print("Message reçu:", bytes(response).decode('ascii'))
+        else:
+            print("Erreur lors de la récupération du message.")
+    else:
+        print("Erreur lors de la sélection de l'applet.")
+
+    connection.disconnect()
+
+if __name__ == "__main__":
+    main()
