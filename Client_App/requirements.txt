@@ -1,0 +1,2 @@
+pyscard==2.0.10
+smartcard==0.3
