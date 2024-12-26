@@ -43,3 +43,28 @@ de vérification au distributeur automatique. On doit décider si l'IP doit étr
 - Enregistrement des transactions sur le serveur de vérification, le serveur devra conserver un journal des transactions
 mais la carte ne stockera pas ces logs. La liste d'achat ne pourra etre consultée que lorsque la carte est insérée dans 
 un lecteur car seule la carte possède la clé privée pour déchiffrer les données.
+
+# Applet JavaCard
+
+## Commandes APDU
+
+Un APDU (Application Protocol Data Unit) est un message échangé entre le terminal et la carte à puce, il s'agit d'une
+unité de communication. Les commandes APDU sont utilisées pour envoyer des instructions à la carte et pour recevoir des
+réponses de la carte.
+
+### Structure d'une commande APDU et d'une réponse APDU
+
+Une commande APDU est composée de 6 champs :
+
+- CLA (Class) : classe de l'instruction
+- INS (Instruction) : instruction
+- P1 (Parameter 1) : paramètre 1
+- P2 (Parameter 2) : paramètre 2
+- Lc (Length of data field) : longueur des données
+- Data : données
+- Le (Length of expected data) : longueur des données attendues
+
+Une réponse APDU est composée de 2 champs :
+
+- Data : données
+- SW1 SW2 (Status Word) : code de statut

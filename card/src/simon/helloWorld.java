@@ -12,6 +12,14 @@ public class helloWorld extends Applet {
     private final static byte[] hello=
             {0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x72, 0x6f, 0x62, 0x65, 0x72, 0x74} ;
 
+    // PIN par défaut
+    private final static byte[] DEFAULT_PIN = {0x01, 0x02, 0x03, 0x04};
+
+    // Taille de la clé RSA
+    private final static short RSA_KEY_SIZE = 1024;
+
+
+
     public static void install(byte[] buffer, short offset, byte length)
 
     {
