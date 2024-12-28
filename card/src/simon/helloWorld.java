@@ -1,11 +1,13 @@
 package simon;
 
+import com.sun.org.apache.bcel.internal.classfile.Utility;
 import javacard.framework.Applet;
 import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.APDU;
 import javacard.framework.Util;
 
+import javax.rmi.CORBA.Util;
 import java.security.interfaces.RSAPublicKey;
 
 
@@ -38,6 +40,7 @@ public class helloWorld extends Applet {
     private final static byte INS_PAY = (byte) 0x60; // Paiement
     private final static byte INS_GET_SERVER_IP = (byte) 0x70; // Récupération de l'adresse IP du serveur
     private final static byte INS_DECRYPT_LOGS = (byte) 0x80; // Déchiffrement des logs
+    private final static byte INS_TEST = (byte) 0x90; // Test
 
 
 
@@ -53,6 +56,62 @@ public class helloWorld extends Applet {
         new helloWorld();
     }
 
+    public void process(APDU apdu) {
+        if (selectingApplet()) {
+            ISOException.throwIt(ISO7816.SW_NO_ERROR);
+        }
+
+        byte[] buffer = apdu.getBuffer();
+
+        // on choisit l'instruction à exécuter en fonction de la valeur de INS
+        switch (buffer[ISO7816.OFFSET_INS]) {
+            case INS_LOGIN:
+                login(apdu);
+                break;
+            case INS_MODIFY_PIN:
+                modifyPin(apdu);
+                break;
+            case INS_TEST:
+                test(apdu);
+                break;
+            default:
+                ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
+        }
+    }
+
+    private void login(APDU apdu) {
+        if (pin.isValidated()) {
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        }
+
+        byte[] buffer = apdu.getBuffer();
+        if (buffer[ISO7816.OFFSET_LC] != PIN_SIZE) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        if (!pin.check(buffer, ISO7816.OFFSET_CDATA, PIN_SIZE)) {
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
+    }
+
+    private void modifyPin(APDU apdu) {
+        isLogin();
+        byte[] buffer = apdu.getBuffer();
+
+        if (buffer[ISO7816.OFFSET_LC] != PIN_SIZE) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        pin.update(buffer, ISO7816.OFFSET_CDATA, PIN_SIZE);
+    }
+
+    private void test(APDU apdu) {
+        byte[] buffer = apdu.getBuffer();
+        Util.arrayCopy(hello, (short) 0, buffer, ISO7816.OFFSET_CDATA, (short) hello.length);
+        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, (short) hello.length);
+    }
+
+
     private void generateKeyPair() {
         keyPair = new KeyPair(KeyPair.ALG_RSA_CRT, RSA_KEY_SIZE);
         keyPair.genKeyPair();
@@ -60,9 +119,8 @@ public class helloWorld extends Applet {
         publicKey = (RSAPublicKey) keyPair.getPublic();
     }
 
-    /*
-        On sérialise la clé publique pour pouvoir l'envoyer au serveur et la stocker dans la mémoire
-     */
+
+    // On sérialise la clé publique pour pouvoir l'envoyer au serveur et la stocker dans la mémoire
     private short serializePublicKey(RSAPublicKey publicKey, byte[] buffer, short offset) {
         // Récupération de l'exposant
         short expLen = publicKey.getExponent(buffer, (short) (offset + 2));
@@ -75,7 +133,11 @@ public class helloWorld extends Applet {
         return (short) (4 + expLen + modLen); // Longueur totale de la clé sérialisée
     }
 
-
+    private void isLogin(APDU apdu) {
+        if (!pin.isValidated()) {
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
+    }
 }
 
 

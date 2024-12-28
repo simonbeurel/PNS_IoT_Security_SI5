@@ -1,6 +1,7 @@
 from smartcard.System import readers
 from smartcard.util import toHexString, toBytes
 
+
 def connect_card():
     r = readers()
     if len(r) == 0:
