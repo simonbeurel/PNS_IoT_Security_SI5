@@ -1,5 +1,8 @@
 from smartcard.System import readers
 from smartcard.Exceptions import NoCardException
+
+from commands import CardCommands
+from apdu import APDU
 from commands import CardCommands
 from card_configuration import *
 
@@ -22,11 +25,16 @@ class SmartCardReader:
             try:
                 connection = reader.createConnection()
                 connection.connect()
+                if not connection:
+                    return
 
                 card = CardCommands(connection)
-
+                print("Selecting applet")
+                print(APPLET_AID)
                 response, sw1, sw2 = card.send_command(apdu_select_applet(APPLET_AID))
 
+
+                print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
                 if is_success(sw1, sw2):
                     self.reader = reader
                     self.connection = connection
@@ -36,3 +44,7 @@ class SmartCardReader:
             except NoCardException:
                 print("No card in reader")
                 return None
+
+def apdu_select_applet(applet_aid):
+    apdu = APDU(0x00, 0xa4, 0x04, 0x00, applet_aid)
+    return apdu

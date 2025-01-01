@@ -1,6 +1,6 @@
 from smartcard.util import toHexString
 
-from Client_App.card_configuration import SW1_RETRY_WITH_LE, INS_GET_RESPONSE
+from card_configuration import *
 
 
 class APDU:
@@ -9,11 +9,10 @@ class APDU:
         self.ins = ins
         self.p1 = p1
         self.p2 = p2
-        self.data = data if data else []
 
         if data is int:
             self.data = [data]
-        if data and not all(isinstance(byte, int) for byte in data):
+        if data and not all(isinstance(byte, int)  for byte in data):
             raise ValueError("les données doivent être une liste d'entiers")
 
         if data:
@@ -30,9 +29,7 @@ class APDU:
 
 
     def __str__(self):
-        data_str = " ".join(f"{byte:02X}" for byte in self.data)
-        return f"APDU(CLA={self.cla:02X}, INS={self.ins:02X}, P1={self.p1:02X}, P2={self.p2:02X}, Data=[{data_str}])"
-
+        return self.get_apdu().__str__()
 
 class APDUHandler:
     def __init__(self, connection):
@@ -40,13 +37,10 @@ class APDUHandler:
 
     def send_command(self, apdu: APDU):
         response, sw1, sw2 = self.connection.transmit(apdu.get_apdu())
-
         if sw1 == SW1_RETRY_WITH_LE:
-            # on envoit l'APDU avec le bon LE
             apdu = APDU(apdu.cla, apdu.ins, apdu.p1, apdu.p2, receive_length=sw2)
             return self.send_command(apdu)
         if sw1 == SW1_RETRY_WITH_GET_RESPONSE_61 or sw1 == SW1_RETRY_WITH_GET_RESPONSE_9F:
-            # si ca marche pas on envoit un GET RESPONSE pour récupérer le reste des données
             apdu = APDU(apdu.cla, INS_GET_RESPONSE, apdu.p1, apdu.p2, receive_length=sw2)
             return self.send_command(apdu)
         return response, sw1, sw2

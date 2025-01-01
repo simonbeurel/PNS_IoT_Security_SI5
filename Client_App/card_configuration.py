@@ -1,13 +1,16 @@
 # Constantes APDU
-APPLET_CLA = 0xB0
+from smartcard.util import toBytes
+
+APPLET_CLA = 0x00
 PIN_SIZE = 4
-APPLET_AID_PREFIX = [0xa0, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46]
-APPLET_AID = APPLET_AID_PREFIX + [0x10, 0x01]
+APPLET_AID = toBytes("a0404142434445461001")
 
 # Instructions
 INS_LOGIN = 0x01
-INS_MODIFY_PIN = 0x20
+INS_MODIFY_PIN = 0x02
 INS_GET_RESPONSE = 0xC0
+INS_TEST = 0x09
+
 
 # reponse APDU
 SW1_RETRY_WITH_LE = 0x6c

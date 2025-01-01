@@ -4,7 +4,6 @@ import javacard.framework.*;
 import javacard.security.KeyPair;
 import javacard.security.RSAPrivateCrtKey;
 import javacard.security.RSAPublicKey;
-import javacard.security.Signature;
 
 
 public class helloWorld extends Applet {
@@ -12,37 +11,22 @@ public class helloWorld extends Applet {
     private final static byte[] hello=
             {0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x72, 0x6f, 0x62, 0x65, 0x72, 0x74} ;
 
-    private final static byte[] DEFAULT_PIN = {0x01, 0x02, 0x03, 0x04};
-    private final static byte PIN_SIZE = 4;
-    private final static byte MAX_PIN_TRIES = 3;
+    public static final byte[] DEFAULT_PIN = {0x01, 0x02, 0x03, 0x04};
+    public static final byte PIN_LENGTH = 4;
+    public static final byte MAX_PIN_TRIES = 3;
 
-    private OwnerPIN pin;
-    private RSAPrivateCrtKey  privateKey;
-    private RSAPublicKey publicKey;
-    private KeyPair keyPair;
-
-    private RSAPublicKey serverPublicKey;
-
-    private final static short RSA_KEY_SIZE = 1024;
-
+    OwnerPIN pin;
     /*
       On définit les constantes pour les différentes instructions
     */
     private final static byte CLA = (byte) 0x00; // CLA
     private final static byte INS_LOGIN = (byte) 0x01; // Inscription
     private final static byte INS_MODIFY_PIN = (byte) 0x02; // Modification du PIN
-    private final static byte INS_SIGN = (byte) 0x03;
-    private final static byte INS_VERIFY = (byte) 0x04; // Vérification du PIN
-    private final static byte INS_SEND_PUBLIC_KEY_TO_SERVER = (byte) 0x05; // Envoi de la clé publique au serveur
-    private final static byte INS_PAY = (byte) 0x06; // Paiement
-    private final static byte INS_GET_SERVER_IP = (byte) 0x07; // Récupération de l'adresse IP du serveur
-    private final static byte INS_DECRYPT_LOGS = (byte) 0x08; // Déchiffrement des logs
     private final static byte INS_TEST = (byte) 0x09; // Test
 
     protected helloWorld() {
-        //pin = new OwnerPIN(MAX_PIN_TRIES, PIN_SIZE);
-        //pin.update(DEFAULT_PIN, (short) 0, PIN_SIZE);
-        //generateKeyPair();
+        pin = new OwnerPIN(MAX_PIN_TRIES, PIN_LENGTH);
+        pin.update(DEFAULT_PIN, (short) 0, PIN_LENGTH);
         register();
     }
 
@@ -51,12 +35,6 @@ public class helloWorld extends Applet {
         new helloWorld();
     }
 
-    private void generateKeyPair() {
-        keyPair = new KeyPair(KeyPair.ALG_RSA_CRT, RSA_KEY_SIZE);
-        keyPair.genKeyPair();
-        privateKey = (RSAPrivateCrtKey ) keyPair.getPrivate();
-        publicKey = (RSAPublicKey) keyPair.getPublic();
-    }
 
     public void process(APDU apdu) {
         if (selectingApplet()) {
@@ -71,12 +49,14 @@ public class helloWorld extends Applet {
 
         // on choisit l'instruction à exécuter en fonction de la valeur de INS
         switch (buffer[ISO7816.OFFSET_INS]) {
-            case (byte) 0x40:
-                Util.arrayCopy(hello, (byte)0, buffer, ISO7816.OFFSET_CDATA, (byte)12);
-                apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, (byte)12);
-                break;
             case INS_TEST:
                 test(apdu);
+                break;
+            case INS_LOGIN:
+                login(apdu);
+                break;
+            case INS_MODIFY_PIN:
+                modifyPin(apdu);
                 break;
             default:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -85,140 +65,50 @@ public class helloWorld extends Applet {
 
     private void test(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
-        byte[] data = {0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x72, 0x6f, 0x62, 0x65, 0x72, 0x74}; // Hello robert
-        Util.arrayCopy(data, (short) 0, buffer, ISO7816.OFFSET_CDATA, (short) data.length);
-        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, (short) data.length);
-    }
-}
-
-
-
-
-
-
-
-
-/*
-public static void install(byte[] buffer, short offset, byte length)
-{
-    // GP-compliant JavaCard applet registration
-    new helloWorld().register();
-}
-
-public void process(APDU apdu) {
-    // Good practice: Return 9000 on SELECT
-    if (selectingApplet()) {
-        return;
+        Util.arrayCopy(hello, (short) 0, buffer, ISO7816.OFFSET_CDATA, (short) hello.length);
+        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, (short) hello.length);
     }
 
-    byte[] buf = apdu.getBuffer();
-    switch (buf[ISO7816.OFFSET_INS]) {
-        case (byte) 0x40:
-            Util.arrayCopy(hello, (byte)0, buf, ISO7816.OFFSET_CDATA, (byte)12);
-            apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, (byte)12);
-            break;
-        default:
-            // good practice: If you don't know the INStruction, say so:
-            ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-    }
-}
- */
-
-/*
+    private void login(APDU apdu) {
+        if (pin.isValidated()) {
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        }
+        byte[] buffer = apdu.getBuffer();
+        short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0xFF);
 
 
-protected helloWorld() {
-    pin = new OwnerPIN(MAX_PIN_TRIES, PIN_SIZE);
-    pin.update(DEFAULT_PIN, (short) 0, PIN_SIZE);
-    generateKeyPair();
-    register();
-}
-
-
-public static void install(byte[] bArray, short bOffset, byte bLength) {
-    new helloWorld();
-}
-
-public void process(APDU apdu) {
-    if (selectingApplet()) {
-        ISOException.throwIt(ISO7816.SW_NO_ERROR);
+        // Copie les données reçues dans la réponse pour débogage
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, buffer, (short) 0, lc);
+        apdu.setOutgoingAndSend((short) 0, lc);
+        checkPin(buffer);
     }
 
-    byte[] buffer = apdu.getBuffer();
 
-    // on choisit l'instruction à exécuter en fonction de la valeur de INS
-    switch (buffer[ISO7816.OFFSET_INS]) {
-        case INS_LOGIN:
-            login(apdu);
-            break;
-        case INS_MODIFY_PIN:
-            modifyPin(apdu);
-            break;
-        case INS_TEST:
-            test(apdu);
-            break;
-        default:
-            ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-    }
-}
+    private void checkPin(byte[] buffer) {
+        if (buffer[ISO7816.OFFSET_LC] != PIN_LENGTH) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
 
-private void login(APDU apdu) {
-    if (pin.isValidated()) {
-        ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        if (!pin.check(buffer, ISO7816.OFFSET_CDATA, PIN_LENGTH)) {
+            ISOException.throwIt((short) (0x69E1));
+        }
     }
 
-    byte[] buffer = apdu.getBuffer();
-    if (buffer[ISO7816.OFFSET_LC] != PIN_SIZE) {
-        ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+
+    private void checkLogin() {
+        if (!pin.isValidated()) {
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
     }
 
-    if (!pin.check(buffer, ISO7816.OFFSET_CDATA, PIN_SIZE)) {
-        ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+    private void modifyPin(APDU apdu) {
+        checkLogin();
+        byte[] buffer = apdu.getBuffer();
+
+        if (buffer[ISO7816.OFFSET_LC] != PIN_LENGTH) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        pin.update(buffer, ISO7816.OFFSET_CDATA, PIN_LENGTH);
     }
 }
-
-private void modifyPin(APDU apdu) {
-    isLogin();
-    byte[] buffer = apdu.getBuffer();
-
-    if (buffer[ISO7816.OFFSET_LC] != PIN_SIZE) {
-        ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-    }
-
-    pin.update(buffer, ISO7816.OFFSET_CDATA, PIN_SIZE);
-}
-
-private void test(APDU apdu) {
-    byte[] buffer = apdu.getBuffer();
-    Util.arrayCopy(hello, (short) 0, buffer, ISO7816.OFFSET_CDATA, (short) hello.length);
-    apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, (short) hello.length);
-}
-
-
-private void generateKeyPair() {
-    keyPair = new KeyPair(KeyPair.ALG_RSA_CRT, RSA_KEY_SIZE);
-    keyPair.genKeyPair();
-    privateKey = (RSAPrivateCrtKey ) keyPair.getPrivate();
-    publicKey = (RSAPublicKey) keyPair.getPublic();
-}
-
-
-// On sérialise la clé publique pour pouvoir l'envoyer au serveur et la stocker dans la mémoire
-private short serializePublicKey(RSAPublicKey publicKey, byte[] buffer, short offset) {
-    // Récupération de l'exposant
-    short expLen = publicKey.getExponent(buffer, (short) (offset + 2));
-    Util.setShort(buffer, offset, expLen);
-
-    // Récupération du modulus
-    short modLen = publicKey.getModulus(buffer, (short) (offset + 4 + expLen));
-    Util.setShort(buffer, (short) (offset + 2 + expLen), modLen);
-
-    return (short) (4 + expLen + modLen); // Longueur totale de la clé sérialisée
-}
-
-private void isLogin(APDU apdu) {
-    if (!pin.isValidated()) {
-        ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
-    }
-}
- */
