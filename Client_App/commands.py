@@ -1,3 +1,5 @@
+from socket import socket
+
 from smartcard.util import toHexString
 
 from apdu import APDUHandler, APDU
@@ -8,6 +10,8 @@ class CardCommands:
     def __init__(self, connection):
         self.connection = connection
         self.apdu_handler = APDUHandler(connection)
+        self.trusted_server = None
+        self.port = 12345
 
     def send_command(self, command):
         return self.apdu_handler.send_command(command)
@@ -67,6 +71,38 @@ class CardCommands:
             return e, n
         else:
             print("Récupération de la clé publique échouée")
+
+    def get_server_ip(self):
+        apdu = APDU(APPLET_CLA, INS_GET_SERVER_IP, 0, 0)
+        response, sw1, sw2 = self.send_command(apdu)
+        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
+        if is_success(sw1, sw2):
+            print("Récupération de l'adresse IP et du port du serveur réussie")
+            ip = ".".join([str(byte) for byte in response[:4]])
+            port = int.from_bytes(response[4:], "big")
+            self.trusted_server = ip
+            self.port = port
+            print(f"Adresse IP du serveur: {ip}")
+            print(f"Port du serveur: {port}")
+        else:
+            print("Récupération de l'adresse IP du serveur échouée")
+
+    def send_public_key_to_server(self, e,n):
+        try:
+            e_bytes = e.to_bytes((e.bit_length() + 7) // 8, byteorder="big")
+            n_bytes = n.to_bytes((n.bit_length() + 7) // 8, byteorder="big")
+
+            data = len(e_bytes).to_bytes(2, "big") + e_bytes + len(n_bytes).to_bytes(2, "big") + n_bytes
+
+            # Connexion au serveur
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                client_socket.connect((self.trusted_server, self.port))
+                # Envoyer une commande spécifique pour indiquer que c'est la clé publique
+                client_socket.sendall(b"SEND_CLIENT_PUBLIC_KEY:" + data)
+                response = client_socket.recv(1024)
+                print("Réponse du serveur :", response.decode())
+        except Exception as e:
+            print("Erreur lors de l'envoi de la clé publique au serveur :", e)
 
 
 def is_success(sw1, sw2):
