@@ -55,6 +55,19 @@ class CardCommands:
 
         return response
 
+    def get_public_key(self):
+        apdu = APDU(APPLET_CLA, INS_SEND_PUBLIC_KEY, 0, 0)
+        response, sw1, sw2 = self.send_command(apdu)
+        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
+        if is_success(sw1, sw2):
+            print("Récupération de la clé publique réussie")
+            e, n = deserialize_e_n(response)
+            print(f"e: {e}")
+            print(f"n: {n}")
+            return e, n
+        else:
+            print("Récupération de la clé publique échouée")
+
 
 def is_success(sw1, sw2):
     success = (sw1 == 0x90 and sw2 == 0x00)
@@ -68,3 +81,10 @@ def is_success(sw1, sw2):
         line_no = inspect.stack()[1].lineno
         print(f"Error from file {file_name} in function \"{caller}\" at line {line_no}")
     return success
+
+def deserialize_e_n(data):
+    len_e = int.from_bytes(data[:2], "big")
+    e = int.from_bytes(data[2:2 + len_e], "big")
+    len_n = int.from_bytes(data[2 + len_e:2 + len_e + 2], "big")
+    n = int.from_bytes(data[2 + len_e + 2:2 + len_e + 2 + len_n], "big")
+    return e, n
