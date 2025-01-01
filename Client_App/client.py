@@ -11,6 +11,9 @@ def main():
     print("Card connected and applet selected")
     card.test()
     card.login("1234")
+    card.modify_pin("1111")
+    card.login("1234")
+    card.login("1111")
     '''
     pin_code = [0x31, 0x32, 0x33, 0x34]
     login_apdu = [0x00, INS_LOGIN, 0x00, 0x00, 0x04] + pin_code
