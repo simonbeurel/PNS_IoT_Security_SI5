@@ -1,6 +1,7 @@
 from smartcard.System import readers
 from smartcard.util import toHexString, toBytes
 
+from card_configuration import INS_LOGIN
 from reader import SmartCardReader
 
 def main():
@@ -9,9 +10,14 @@ def main():
 
     print("Card connected and applet selected")
     card.test()
-    card.login("0000")
-    card.modify_pin("1234")
     card.login("1234")
+    '''
+    pin_code = [0x31, 0x32, 0x33, 0x34]
+    login_apdu = [0x00, INS_LOGIN, 0x00, 0x00, 0x04] + pin_code
+    print(toHexString(login_apdu))
+    response, sw1, sw2 = card.connection.transmit(login_apdu)
+    print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
+    '''
     return 0
 
 if __name__ == '__main__':

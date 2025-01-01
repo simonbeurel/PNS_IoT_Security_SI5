@@ -1,5 +1,6 @@
 from smartcard.System import readers
 from smartcard.Exceptions import NoCardException
+from smartcard.util import toHexString
 
 from commands import CardCommands
 from apdu import APDU
@@ -47,4 +48,5 @@ class SmartCardReader:
 
 def apdu_select_applet(applet_aid):
     apdu = APDU(0x00, 0xa4, 0x04, 0x00, applet_aid)
+    print(toHexString(apdu.get_apdu()))
     return apdu

@@ -2,47 +2,69 @@ from smartcard.System import readers
 from smartcard.util import toHexString, toBytes
 
 
-def connect_card():
-    r = readers()
-    if len(r) == 0:
-        print("Aucun lecteur de carte détecté.")
-        return None
-    connection = r[0].createConnection()
-    print("Connexion au lecteur:", r[0])
-    connection.connect()
-    return connection
+def send_login_apdu():
+    # AID of the applet - you'll need to replace this with your actual AID
+    # This is typically defined when installing the applet
+    APPLET_AID = toBytes("a0404142434445461001")
 
-def send_apdu(connection, apdu):
-    response, sw1, sw2 = connection.transmit(apdu)
-    print(f"Envoyé: {toHexString(apdu)}")
-    print(f"Reçu: {toHexString(response)} {hex(sw1)[2:].zfill(2)} {hex(sw2)[2:].zfill(2)}")
-    return response, sw1, sw2
+    # Constants from the Java code
+    CLA = 0x00
+    INS_LOGIN = 0x01
+    DEFAULT_PIN = [0x00, 0x00, 0x00, 0x00]
 
-def main():
-    connection = connect_card()
-    if not connection:
-        return
+    # SELECT APDU
+    select_apdu = [0x00, 0xA4, 0x04, 0x00] + [len(APPLET_AID)] + APPLET_AID
 
-    # Sélectionner l'AID de l'applet installé
-    aid = toBytes("a0404142434445461001")  # AID sans l'instance
-    select_apdu = [0x00, 0xA4, 0x04, 0x00] + [len(aid)] + aid
-    response, sw1, sw2 = send_apdu(connection, select_apdu)
+    # LOGIN APDU
+    login_apdu = [
+                     CLA,
+                     INS_LOGIN,
+                     0x00,
+                     0x00,
+                     0x04,
+                 ] + DEFAULT_PIN
 
-    if sw1 == 0x90 and sw2 == 0x00:
-        print("Applet sélectionné avec succès.")
+    try:
+        r = readers()
+        if len(r) < 1:
+            print("No readers found")
+            return
 
-        # Envoyer la commande pour obtenir le message "Hello"
-        hello_apdu = [0x80, 0x40, 0x00, 0x00, 0x0c] # 0x0c est la longueur du message
-        response, sw1, sw2 = send_apdu(connection, hello_apdu)
+        print(f"Using reader: {r[0]}")
+        connection = r[0].createConnection()
+        connection.connect()
 
-        if sw1 == 0x90 and sw2 == 0x00:
-            print("Message reçu:", bytes(response).decode('ascii'))
+        # First select the applet
+        print("Sending SELECT APDU:")
+        print(f"-> {toHexString(select_apdu)}")
+        data, sw1, sw2 = connection.transmit(select_apdu)
+        print(f"Select Response: SW1: {hex(sw1)}, SW2: {hex(sw2)}")
+
+        if (sw1, sw2) != (0x90, 0x00):
+            print("Failed to select applet")
+            return
+
+        # Then send login command
+        print("\nSending LOGIN APDU:")
+        print(f"-> {toHexString(login_apdu)}")
+        data, sw1, sw2 = connection.transmit(login_apdu)
+        print(f"Login Response: SW1: {hex(sw1)}, SW2: {hex(sw2)}")
+
+        # Check response
+        if (sw1, sw2) == (0x90, 0x00):
+            print("Login successful!")
+        elif (sw1, sw2) == (0x69, 0x82):
+            print("Login failed: Security status not satisfied (wrong PIN)")
+        elif (sw1, sw2) == (0x69, 0x85):
+            print("Login failed: Conditions not satisfied (already logged in)")
+        elif (sw1, sw2) == (0x6D, 0x00):
+            print("Instruction not supported - Make sure applet is properly selected")
         else:
-            print("Erreur lors de la récupération du message.")
-    else:
-        print("Erreur lors de la sélection de l'applet.")
+            print(f"Unknown response: {hex(sw1)}{hex(sw2)}")
 
-    connection.disconnect()
+    except Exception as e:
+        print(f"Error: {e}")
+
 
 if __name__ == "__main__":
-    main()
+    send_login_apdu()
