@@ -12,8 +12,6 @@ def main():
     card.test()
     card.login("1234")
 
-    # e,n = card.get_public_key()
-
     card.get_server_ip()
     e, n = card.get_public_key()
     return 0
