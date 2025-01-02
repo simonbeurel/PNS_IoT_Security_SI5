@@ -1,4 +1,7 @@
+import json
 import socket
+from typing import Tuple
+
 
 from apdu import APDUHandler, APDU
 from card_configuration import *
@@ -66,6 +69,8 @@ class CardCommands:
             e, n = deserialize_e_n(response)
             print(f"e: {e}")
             print(f"n: {n}")
+            public_key = (e, n)
+            self.send_public_key_to_server(public_key)
             return e, n
         else:
             print("Récupération de la clé publique échouée")
@@ -85,30 +90,35 @@ class CardCommands:
         else:
             print("Récupération de l'adresse IP du serveur échouée")
 
-    def send_public_key_to_server(self, e, n):
+    def send_public_key_to_server(self, public_key: Tuple[int, int]):
+        """Envoie la clé publique au serveur"""
         try:
-            # Convertir e et n en données binaires
-            e_bytes = e.to_bytes((e.bit_length() + 7) // 8, 'big')  # Conversion de e en bytes
-            n_bytes = n.to_bytes((n.bit_length() + 7) // 8, 'big')  # Conversion de n en bytes
+            e, n = public_key
+            key_data = {
+                'type': 'store_key',
+                'client_id': 'card_' + str(id(self)),  # Identifiant unique pour la carte
+                'public_key': {
+                    'n': n,
+                    'e': e
+                }
+            }
 
-            # Créer un message avec la taille des données et les données elles-mêmes
-            data = e_bytes + n_bytes
-            data_size = len(data)
-
-            # Se connecter au serveur
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((self.trusted_server, self.port))
+                s.send(json.dumps(key_data).encode())
 
-                # Envoyer la taille des données suivie des données
-                s.sendall(data_size.to_bytes(4, 'big'))  # Envoi de la taille des données
-                s.sendall(data)  # Envoi de la clé publique (e, n)
+                response = s.recv(1024)
+                response_data = json.loads(response.decode())
 
-                # Attendre la réponse du serveur
-                response_size = int.from_bytes(s.recv(4), 'big')
-                response = s.recv(response_size)
-                print(f"Réponse du serveur : {response.decode('utf-8')}")
+                if response_data['status'] == 'success':
+                    print("Clé publique envoyée et stockée avec succès")
+                else:
+                    print("Erreur lors de l'envoi de la clé publique")
+
         except Exception as e:
-            print(f"Erreur lors de l'envoi de la clé publique au serveur : {e}")
+            print(f"Erreur lors de l'envoi de la clé publique: {e}")
+
+
 
 def is_success(sw1, sw2):
     success = (sw1 == 0x90 and sw2 == 0x00)
