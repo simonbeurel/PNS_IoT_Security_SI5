@@ -1,6 +1,4 @@
-from socket import socket
-
-from smartcard.util import toHexString
+import socket
 
 from apdu import APDUHandler, APDU
 from card_configuration import *
@@ -87,23 +85,30 @@ class CardCommands:
         else:
             print("Récupération de l'adresse IP du serveur échouée")
 
-    def send_public_key_to_server(self, e,n):
+    def send_public_key_to_server(self, e, n):
         try:
-            e_bytes = e.to_bytes((e.bit_length() + 7) // 8, byteorder="big")
-            n_bytes = n.to_bytes((n.bit_length() + 7) // 8, byteorder="big")
+            # Convertir e et n en données binaires
+            e_bytes = e.to_bytes((e.bit_length() + 7) // 8, 'big')  # Conversion de e en bytes
+            n_bytes = n.to_bytes((n.bit_length() + 7) // 8, 'big')  # Conversion de n en bytes
 
-            data = len(e_bytes).to_bytes(2, "big") + e_bytes + len(n_bytes).to_bytes(2, "big") + n_bytes
+            # Créer un message avec la taille des données et les données elles-mêmes
+            data = e_bytes + n_bytes
+            data_size = len(data)
 
-            # Connexion au serveur
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-                client_socket.connect((self.trusted_server, self.port))
-                # Envoyer une commande spécifique pour indiquer que c'est la clé publique
-                client_socket.sendall(b"SEND_CLIENT_PUBLIC_KEY:" + data)
-                response = client_socket.recv(1024)
-                print("Réponse du serveur :", response.decode())
+            # Se connecter au serveur
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((self.trusted_server, self.port))
+
+                # Envoyer la taille des données suivie des données
+                s.sendall(data_size.to_bytes(4, 'big'))  # Envoi de la taille des données
+                s.sendall(data)  # Envoi de la clé publique (e, n)
+
+                # Attendre la réponse du serveur
+                response_size = int.from_bytes(s.recv(4), 'big')
+                response = s.recv(response_size)
+                print(f"Réponse du serveur : {response.decode('utf-8')}")
         except Exception as e:
-            print("Erreur lors de l'envoi de la clé publique au serveur :", e)
-
+            print(f"Erreur lors de l'envoi de la clé publique au serveur : {e}")
 
 def is_success(sw1, sw2):
     success = (sw1 == 0x90 and sw2 == 0x00)

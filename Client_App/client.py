@@ -15,7 +15,8 @@ def main():
     # e,n = card.get_public_key()
 
     card.get_server_ip()
-
+    e, n = card.get_public_key()
+    card.send_public_key_to_server(e, n)
     return 0
 
 if __name__ == '__main__':
