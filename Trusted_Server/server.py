@@ -1,5 +1,8 @@
 import json
+import signal
 import socket
+import sys
+
 import rsa
 
 from Trusted_Server.KeyManager import RSAKeyManager
@@ -14,6 +17,8 @@ class RSAServer:
         self.private_key = None
         self.key_manager = RSAKeyManager()
         self.generate_rsa_keys()
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
 
     def generate_rsa_keys(self):
         """Génère une paire de clés RSA."""
@@ -38,20 +43,40 @@ class RSAServer:
                 return
 
             message = json.loads(data.decode())
+            print(f"Message reçu: {message}")
 
-            if message['type'] == 'store_key':
+            if message['type'] == 'key_exchange':
+                # 1. Stocker la clé du client
                 success = self.store_client_public_key(
                     message['client_id'],
                     message['public_key']
                 )
+
+                # 2. Préparer la réponse avec notre clé publique
                 response = {
                     'status': 'success' if success else 'error',
-                    'message': 'Clé stockée avec succès' if success else 'Erreur lors du stockage'
+                    'message': 'Échange de clés réussi' if success else 'Erreur lors de l\'échange',
+                    'public_key': {
+                        'n': self.public_key.n,
+                        'e': self.public_key.e
+                    }
                 }
+
+                print(f"Clé client stockée: {success}")
+                print(f"Envoi de notre clé publique...")
                 client_socket.send(json.dumps(response).encode())
 
         except Exception as e:
             print(f"Erreur lors du traitement du client: {e}")
+            # Envoyer une réponse d'erreur au client
+            error_response = {
+                'status': 'error',
+                'message': f'Erreur serveur: {str(e)}'
+            }
+            try:
+                client_socket.send(json.dumps(error_response).encode())
+            except:
+                pass
         finally:
             client_socket.close()
 
@@ -87,6 +112,12 @@ class RSAServer:
             print("Serveur arrêté proprement")
         except Exception as e:
             print(f"Erreur lors de l'arrêt du serveur: {e}")
+
+    def signal_handler(self, signum, frame):
+        """Gestionnaire des signaux d'arrêt"""
+        print("\nArrêt du serveur...")
+        self.cleanup()
+        sys.exit(0)
 
 # Fonction pour tester le serveur
 if __name__ == "__main__":

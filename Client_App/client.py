@@ -13,7 +13,8 @@ def main():
     card.login("1234")
 
     card.get_server_ip()
-    e, n = card.get_public_key()
+    card.exchange_keys_with_server()
+    card.verify_server_key()
     return 0
 
 if __name__ == '__main__':

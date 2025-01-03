@@ -1,6 +1,7 @@
 package simon;
 
 import javacard.framework.*;
+import javacard.security.KeyBuilder;
 import javacard.security.KeyPair;
 import javacard.security.RSAPrivateCrtKey;
 import javacard.security.RSAPublicKey;
@@ -18,6 +19,7 @@ public class helloWorld extends Applet {
     private static final byte[] SERVER_IP = {0x7F, 0x00, 0x00, 0x01};
     private static final short SERVER_PORT = 12345;
 
+
     private KeyPair keyPair;
     private RSAPublicKey publicKey;
     private RSAPrivateCrtKey privateKey;
@@ -33,8 +35,8 @@ public class helloWorld extends Applet {
     private final static byte INS_MODIFY_PIN = (byte) 0x02; // Modification du PIN
     private final static byte INS_SEND_PUBLIC_KEY = (byte) 0x03; // Envoi de la clé publique
     private final static byte INS_GET_SERVER_IP = (byte) 0x04; // Récupération de l'adresse IP du serveur
-    private final static byte INS_GET_SERVER_PUBLIC_KEY = (byte) 0x05; // Récupération de la clé publique du serveur
-
+    private final static byte INS_STORE_SERVER_KEY = (byte) 0x05; // Récupération et stockage de la clé publique du serveur
+    private static final byte INS_VERIFY_SERVER_KEY = (byte) 0x06; // Vérification de la clé publique du serveur
 
     private final static byte INS_TEST = (byte) 0x09; // Test
 
@@ -98,6 +100,12 @@ public class helloWorld extends Applet {
                 Util.setShort(buffer, (short) (ISO7816.OFFSET_CDATA + SERVER_IP.length), SERVER_PORT);
                 apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, (short) (SERVER_IP.length + 2));
                 break;
+            case INS_STORE_SERVER_KEY:
+                storeServerKey(apdu);
+                break;
+            case INS_VERIFY_SERVER_KEY:
+                verifyServerKey(apdu);
+                break;
             default:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }
@@ -150,6 +158,65 @@ public class helloWorld extends Applet {
         checkLogin();
         byte[] buffer = apdu.getBuffer();
         short len = serializeKey(publicKey, buffer, ISO7816.OFFSET_CDATA);
+        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, len);
+    }
+
+    private void storeServerKey(APDU apdu) {
+        checkLogin();
+        byte[] buffer = apdu.getBuffer();
+        short len = apdu.setIncomingAndReceive();
+
+        if (buffer[ISO7816.OFFSET_LC] == 0) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        try {
+            if (serverPublicKey == null) {
+                serverPublicKey = (RSAPublicKey) KeyBuilder.buildKey(
+                        KeyBuilder.TYPE_RSA_PUBLIC,
+                        KeyBuilder.LENGTH_RSA_512,
+                        false);
+            }
+
+            // Lire la longueur de l'exposant (e)
+            short offset = ISO7816.OFFSET_CDATA;
+            short eLength = (short)(buffer[offset] & 0xFF);
+            offset++;
+
+            // Vérifier que nous avons assez de données
+            if (eLength <= 0 || eLength > 128) { // 128 octets devraient être suffisants pour un exposant RSA
+                ISOException.throwIt(ISO7816.SW_WRONG_DATA);
+            }
+
+            // Définir l'exposant
+            serverPublicKey.setExponent(buffer, offset, eLength);
+            offset += eLength;
+
+            // Lire la longueur du modulus (n)
+            short nLength = (short)(buffer[offset] & 0xFF);
+            offset++;
+
+            // Vérifier que nous avons assez de données
+            if (nLength <= 0 || nLength > 64) { // 64 octets pour une clé RSA 512-bit
+                ISOException.throwIt(ISO7816.SW_WRONG_DATA);
+            }
+
+            // Définir le modulus
+            serverPublicKey.setModulus(buffer, offset, nLength);
+        } catch (Exception e) {
+            ISOException.throwIt(ISO7816.SW_WRONG_DATA);
+        }
+    }
+
+    private void verifyServerKey(APDU apdu) {
+        checkLogin();
+
+        if (serverPublicKey == null) {
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        }
+
+        byte[] buffer = apdu.getBuffer();
+        short len = serializeKey(serverPublicKey, buffer, ISO7816.OFFSET_CDATA);
         apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, len);
     }
 }

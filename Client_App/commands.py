@@ -2,6 +2,7 @@ import json
 import socket
 from typing import Tuple
 
+import rsa
 
 from apdu import APDUHandler, APDU
 from card_configuration import *
@@ -13,6 +14,7 @@ class CardCommands:
         self.apdu_handler = APDUHandler(connection)
         self.trusted_server = None
         self.port = 12345
+        self.server_public_key = None
 
     def send_command(self, command):
         return self.apdu_handler.send_command(command)
@@ -69,8 +71,6 @@ class CardCommands:
             e, n = deserialize_e_n(response)
             print(f"e: {e}")
             print(f"n: {n}")
-            public_key = (e, n)
-            self.send_public_key_to_server(public_key)
             return e, n
         else:
             print("Récupération de la clé publique échouée")
@@ -85,10 +85,81 @@ class CardCommands:
             port = int.from_bytes(response[4:], "big")
             self.trusted_server = ip
             self.port = port
-            print(f"Adresse IP du serveur: {ip}")
-            print(f"Port du serveur: {port}")
         else:
             print("Récupération de l'adresse IP du serveur échouée")
+
+    def exchange_keys_with_server(self):
+        """Effectue l'échange de clés avec le serveur"""
+        try:
+            # 1. Obtenir d'abord notre clé publique de la JavaCard
+            public_key = self.get_public_key()
+            if not public_key:
+                return False
+
+            e, n = public_key
+
+            # 2. Préparer le message d'échange de clés
+            key_data = {
+                'type': 'key_exchange',
+                'client_id': 'card_' + str(id(self)),
+                'public_key': {
+                    'n': n,
+                    'e': e
+                }
+            }
+
+            # 3. Établir la connexion et envoyer notre clé
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((self.trusted_server, self.port))
+                s.send(json.dumps(key_data).encode())
+
+                # 4. Recevoir la clé du serveur
+                response = s.recv(1024)
+                response_data = json.loads(response.decode())
+
+                if response_data['status'] == 'success':
+                    # 5. Stocker la clé du serveur
+                    server_key = response_data['public_key']
+                    self.server_public_key = rsa.PublicKey(n=server_key['n'], e=server_key['e'])
+
+                    # 6. Envoyer la clé du serveur à la JavaCard
+                    success = self.store_server_key(server_key['e'], server_key['n'])
+                    if success:
+                        print("Échange complet des clés réussi")
+                        return True
+                    else:
+                        print("Échec lors du stockage de la clé serveur sur la JavaCard")
+                        return False
+                else:
+                    print("Erreur lors de l'échange de clés")
+                    return False
+
+        except Exception as e:
+            print(f"Erreur lors de l'échange de clés: {e}")
+            return False
+
+    def store_server_key(self, e, n):
+        """Stocke la clé publique du serveur sur la JavaCard"""
+        # Convertir e et n en bytes
+        e_bytes = e.to_bytes((e.bit_length() + 7) // 8, byteorder='big')
+        n_bytes = n.to_bytes((n.bit_length() + 7) // 8, byteorder='big')
+
+        # Préparer les données à envoyer
+        data = [
+            len(e_bytes),  # Longueur de e
+            *e_bytes,  # e
+            len(n_bytes),  # Longueur de n
+            *n_bytes  # n
+        ]
+
+        # Envoyer l'APDU pour stocker la clé
+        apdu = APDU(APPLET_CLA, INS_STORE_SERVER_KEY, 0, 0, data)
+        response, sw1, sw2 = self.send_command(apdu)
+        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
+        if is_success(sw1, sw2):
+            return True
+        else:
+            return False
 
     def send_public_key_to_server(self, public_key: Tuple[int, int]):
         """Envoie la clé publique au serveur"""
@@ -118,6 +189,27 @@ class CardCommands:
         except Exception as e:
             print(f"Erreur lors de l'envoi de la clé publique: {e}")
 
+    def verify_server_key(self):
+        """Vérifie que la clé du serveur est correctement stockée sur la JavaCard"""
+        apdu = APDU(APPLET_CLA, INS_VERIFY_SERVER_KEY, 0, 0)
+        response, sw1, sw2 = self.send_command(apdu)
+        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
+        if is_success(sw1, sw2):
+            print("Vérification de la clé serveur réussie")
+            e, n = deserialize_e_n(response)
+            print(f"Clé stockée sur la carte:")
+            print(f"e: {e}")
+            print(f"n: {n}")
+            # Vérifier que la clé correspond à celle du serveur
+            if self.server_public_key:
+                if e == self.server_public_key.e and n == self.server_public_key.n:
+                    print("La clé correspond à celle du serveur")
+                else:
+                    print("La clé ne correspond pas à celle du serveur")
+            return e, n
+        else:
+            print("Vérification de la clé serveur échouée")
+            return None
 
 
 def is_success(sw1, sw2):
