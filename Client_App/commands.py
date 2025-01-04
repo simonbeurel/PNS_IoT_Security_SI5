@@ -1,5 +1,7 @@
+import base64
 import json
 import socket
+from io import BytesIO
 from typing import Tuple
 
 import rsa
@@ -15,6 +17,7 @@ class CardCommands:
         self.trusted_server = None
         self.port = 12345
         self.server_public_key = None
+        self.card_public_key = None
 
     def send_command(self, command):
         return self.apdu_handler.send_command(command)
@@ -97,6 +100,7 @@ class CardCommands:
                 return False
 
             e, n = public_key
+            self.card_public_key = rsa.PublicKey(n=n, e=e)
 
             # 2. Préparer le message d'échange de clés
             key_data = {
@@ -210,6 +214,84 @@ class CardCommands:
         else:
             print("Vérification de la clé serveur échouée")
             return None
+
+    def secure_transaction(self, transaction_data):
+        """
+        Chiffre et signe les données de transaction en une seule opération
+        """
+        transaction_data_encoded = transaction_data.encode(TEXT_ENCODING)
+        data = [c for c in transaction_data_encoded]
+
+        apdu = APDU(APPLET_CLA, INS_ENCRYPT_AND_SIGN, 0, 0, data)
+        response, sw1, sw2 = self.send_command(apdu)
+
+        if not is_success(sw1, sw2):
+            print("Échec de la transaction sécurisée")
+            return None
+
+        # Extraire les différentes parties de la réponse
+        encrypted_length = int.from_bytes(response[:2], 'big')
+        encrypted_data = response[2:2 + encrypted_length]
+        signature = response[2 + encrypted_length:]
+
+        print(f"encrypted_data: {encrypted_data}")
+        print(f"signature: {signature}")
+
+        # Verifier la signature de la carte
+        if not self.check_card_signature(encrypted_data, signature):
+            print("Échec de la vérification de la signature de la carte")
+            return False
+
+        print("Signature de la carte vérifiée avec succès")
+        success = self.send_transaction_to_server(encrypted_data, signature)
+        return success
+
+    def check_card_signature(self, encrypted_data, signature):
+        """Vérifie la signature de la carte"""
+        try:
+            # Convertir les données en un objet file-like
+            message = BytesIO(bytes(encrypted_data))
+            signature = bytes(signature)
+
+            # Vérifier la signature avec la clé publique de la carte
+            rsa.verify(message, signature, self.card_public_key)
+            return True
+        except rsa.VerificationError:
+            print("Échec de la vérification de la signature")
+            return False
+        except Exception as e:
+            print(f"Erreur lors de la vérification de la signature : {e}")
+            return False
+
+    def send_transaction_to_server(self, encrypted_data, signature):
+        try:
+            encrypted_b64 = base64.b64encode(bytes(encrypted_data)).decode()
+            signature_b64 = base64.b64encode(bytes(signature)).decode()
+            # Préparer les données de transaction
+            transaction_data = {
+                'type': 'transaction',
+                'client_id': 'card_' + str(id(self)),
+                'encrypted_data': encrypted_b64,
+                'signature': signature_b64
+            }
+
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((self.trusted_server, self.port))
+                s.send(json.dumps(transaction_data).encode())
+
+                response = s.recv(1024)
+                response_data = json.loads(response.decode())
+
+                if response_data['status'] == 'success':
+                    print("Transaction envoyée avec succès")
+                    return True
+                else:
+                    print("Erreur lors de l'envoi de la transaction")
+                    return False
+        except Exception as e:
+            print(f"Erreur lors de l'envoi de la transaction: {e}")
+            return False
+
 
 
 def is_success(sw1, sw2):

@@ -1,10 +1,8 @@
 package simon;
 
 import javacard.framework.*;
-import javacard.security.KeyBuilder;
-import javacard.security.KeyPair;
-import javacard.security.RSAPrivateCrtKey;
-import javacard.security.RSAPublicKey;
+import javacard.security.*;
+import javacardx.crypto.Cipher;
 
 
 public class helloWorld extends Applet {
@@ -37,6 +35,7 @@ public class helloWorld extends Applet {
     private final static byte INS_GET_SERVER_IP = (byte) 0x04; // Récupération de l'adresse IP du serveur
     private final static byte INS_STORE_SERVER_KEY = (byte) 0x05; // Récupération et stockage de la clé publique du serveur
     private static final byte INS_VERIFY_SERVER_KEY = (byte) 0x06; // Vérification de la clé publique du serveur
+    private static final byte INS_ENCRYPT_AND_SIGN  = (byte) 0x07; // Signature de données
 
     private final static byte INS_TEST = (byte) 0x09; // Test
 
@@ -106,6 +105,10 @@ public class helloWorld extends Applet {
             case INS_VERIFY_SERVER_KEY:
                 verifyServerKey(apdu);
                 break;
+            case INS_ENCRYPT_AND_SIGN :
+                encryptAndSign(apdu);
+                break;
+
             default:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }
@@ -218,5 +221,51 @@ public class helloWorld extends Applet {
         byte[] buffer = apdu.getBuffer();
         short len = serializeKey(serverPublicKey, buffer, ISO7816.OFFSET_CDATA);
         apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, len);
+    }
+
+    private void encryptAndSign(APDU apdu) {
+        checkLogin();
+
+        if (serverPublicKey == null) {
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        }
+
+        byte[] buffer = apdu.getBuffer();
+        short dataLength = apdu.setIncomingAndReceive();
+
+        // Buffer temporaire pour stocker les données chiffrées
+        byte[] tempBuffer = new byte[256];
+
+        // 1. Chiffrer avec la clé publique du serveur
+        Cipher cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false);
+        cipher.init(serverPublicKey, Cipher.MODE_ENCRYPT);
+        short encryptedLength = cipher.doFinal(
+                buffer, ISO7816.OFFSET_CDATA,
+                dataLength,
+                tempBuffer, (short)0
+        );
+
+        // 2. Signer les données chiffrées
+        Signature sig = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
+        sig.init(privateKey, Signature.MODE_SIGN);
+
+        // Copier la longueur des données chiffrées (2 bytes)
+        Util.setShort(buffer, ISO7816.OFFSET_CDATA, encryptedLength);
+
+        // Copier les données chiffrées
+        Util.arrayCopy(tempBuffer, (short)0,
+                buffer, (short)(ISO7816.OFFSET_CDATA + 2),
+                encryptedLength);
+
+        // Calculer et ajouter la signature des données chiffrées
+        short signatureLength = sig.sign(
+                buffer, (short)(ISO7816.OFFSET_CDATA + 2),
+                encryptedLength,
+                buffer, (short)(ISO7816.OFFSET_CDATA + 2 + encryptedLength)
+        );
+
+        // Envoyer le tout
+        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA,
+                (short)(2 + encryptedLength + signatureLength));
     }
 }

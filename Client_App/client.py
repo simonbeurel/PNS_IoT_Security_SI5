@@ -15,6 +15,12 @@ def main():
     card.get_server_ip()
     card.exchange_keys_with_server()
     card.verify_server_key()
+
+    res = card.secure_transaction("Hello robert")
+    if res:
+        print("Transaction successfull")
+    else:
+        print("Transaction failed")
     return 0
 
 if __name__ == '__main__':

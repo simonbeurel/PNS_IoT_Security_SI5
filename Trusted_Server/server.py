@@ -1,11 +1,14 @@
+import base64
 import json
 import signal
 import socket
 import sys
+from pathlib import Path
 
 import rsa
 
 from Trusted_Server.KeyManager import RSAKeyManager
+from Trusted_Server.TransactionLogger import TransactionLogger
 
 
 class RSAServer:
@@ -16,6 +19,8 @@ class RSAServer:
         self.public_key = None
         self.private_key = None
         self.key_manager = RSAKeyManager()
+        self.transaction_logger = TransactionLogger()
+
         self.generate_rsa_keys()
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
@@ -35,6 +40,65 @@ class RSAServer:
             print(f"Erreur lors du stockage de la clé publique: {e}")
             return False
 
+    def handle_transaction(self, message):
+        try:
+            client_id = message['client_id']
+            # Convertir les données de base64 en bytes si nécessaire
+            encrypted_data = base64.b64decode(message['encrypted_data']) if isinstance(message['encrypted_data'],
+                                                                                       str) else message[
+                'encrypted_data']
+            signature = base64.b64decode(message['signature']) if isinstance(message['signature'], str) else message[
+                'signature']
+            # 1. Vérifier la signature avec la clé publique du client
+            client_public_key = self.key_manager.get_public_key(client_id)
+            if not client_public_key:
+                raise Exception("Clé client non trouvée")
+
+            verification_status = False
+            try:
+                # Vérifier la signature des données chiffrées
+                rsa.verify(encrypted_data, signature, client_public_key)
+                verification_status = True
+                print(f"Signature vérifiée avec succès pour le client {client_id}")
+
+                # 2. Déchiffrer les données avec notre clé privée
+                decrypted_data = rsa.decrypt(encrypted_data, self.private_key)
+                print(f"Données déchiffrées: {decrypted_data.decode('utf-8')}")
+
+                # 3. Stocker la transaction
+                self.transaction_logger.log_transaction(
+                    client_id,
+                    encrypted_data,
+                    signature,
+                    verification_status
+                )
+
+                return {
+                    'status': 'success',
+                    'message': 'Transaction vérifiée et enregistrée'
+                }
+
+            except rsa.VerificationError:
+                print(f"Échec de la vérification de signature pour le client {client_id}")
+                # On log quand même la transaction mais avec verification_status = False
+                self.transaction_logger.log_transaction(
+                    client_id,
+                    encrypted_data,
+                    signature,
+                    verification_status
+                )
+                return {
+                    'status': 'error',
+                    'message': 'Signature invalide'
+                }
+
+        except Exception as e:
+            print(f"Erreur lors du traitement de la transaction: {e}")
+            return {
+                'status': 'error',
+                'message': f'Erreur de traitement: {str(e)}'
+            }
+
     def handle_client(self, client_socket):
         """Gérer la communication avec le client"""
         try:
@@ -44,6 +108,10 @@ class RSAServer:
 
             message = json.loads(data.decode())
             print(f"Message reçu: {message}")
+
+            if message['type'] == 'transaction':
+                response = self.handle_transaction(message)
+                client_socket.send(json.dumps(response).encode())
 
             if message['type'] == 'key_exchange':
                 # 1. Stocker la clé du client
@@ -65,6 +133,8 @@ class RSAServer:
                 print(f"Clé client stockée: {success}")
                 print(f"Envoi de notre clé publique...")
                 client_socket.send(json.dumps(response).encode())
+
+
 
         except Exception as e:
             print(f"Erreur lors du traitement du client: {e}")
