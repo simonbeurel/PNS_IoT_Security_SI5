@@ -1,3 +1,7 @@
+import math
+from dataclasses import dataclass
+from typing import List, Optional
+
 from smartcard.util import toHexString
 
 from card_configuration import *

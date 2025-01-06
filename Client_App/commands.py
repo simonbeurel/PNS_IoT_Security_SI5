@@ -2,7 +2,7 @@ import base64
 import json
 import socket
 from io import BytesIO
-from typing import Tuple
+from typing import Tuple, Any
 
 import rsa
 
@@ -292,6 +292,85 @@ class CardCommands:
             print(f"Erreur lors de l'envoi de la transaction: {e}")
             return False
 
+    def send_fragmented_message(self, message: str):
+        """
+        Sends a message to the card in fragments, gets back encrypted and signed response
+        """
+        message_bytes = message.encode(TEXT_ENCODING)
+        chunk_size = 12  # Maximum size for each fragment
+
+        # Send first fragment
+        data = [c for c in message_bytes[:chunk_size]]
+        apdu = APDU(APPLET_CLA, INS_FRAGMENT, 0x00, 0x00, data)  # P1=START, P2=RECEIVE
+        response, sw1, sw2 = self.send_command(apdu)
+        print("First fragment")
+        if not is_success(sw1, sw2):
+            print("Failed to send first fragment")
+            return None
+
+        # Send middle fragments
+        pos = chunk_size
+        while pos < len(message_bytes) - chunk_size:
+            data = [c for c in message_bytes[pos:pos + chunk_size]]
+            apdu = APDU(APPLET_CLA, INS_FRAGMENT, 0x01, 0x00, data)  # P1=CONTINUE
+            response, sw1, sw2 = self.send_command(apdu)
+            if not is_success(sw1, sw2):
+                print(f"Failed to send fragment at position {pos}")
+                return None
+
+            pos += chunk_size
+
+        # Send final fragment
+        if pos < len(message_bytes):
+            data = [c for c in message_bytes[pos:]]
+            apdu = APDU(APPLET_CLA, INS_FRAGMENT, 0x02, 0x00, data)  # P1=FINAL
+            response, sw1, sw2 = self.send_command(apdu)
+            print(f'sw1: {sw1:02X}, sw2: {sw2:02X}')
+            if not is_success(sw1, sw2):
+                print("Failed to send final fragment")
+                return None
+
+        # Receive encrypted and signed response in fragments
+        complete_response = []
+
+        while True:
+            apdu = APDU(APPLET_CLA, INS_FRAGMENT, 0x00, 0x01)  # P2=SEND
+            response, sw1, sw2 = self.send_command(apdu)
+
+            if not is_success(sw1, sw2):
+                print("Failed to receive response fragment")
+                return None
+
+            complete_response.extend(response)
+
+            # Check if this was the last fragment
+            if len(response) < 128:  # Less than max chunk size means last fragment
+                break
+
+        # Parse the complete response
+        encrypted_length = int.from_bytes(complete_response[:2], 'big')
+        encrypted_data = complete_response[2:2 + encrypted_length]
+        signature = complete_response[2 + encrypted_length:]
+
+        print("Encrypted data:", encrypted_data)
+        print("Signature:", signature)
+        # Verify signature and send to server
+        if not self.check_card_signature(encrypted_data, signature):
+            print("Failed to verify card signature")
+            return None
+
+        success = self.send_transaction_to_server(encrypted_data, signature)
+        return success
+
+    def secure_transaction_fragmented(self, transaction_data: str):
+        """
+        Process a secure transaction using fragmented messages
+        """
+        if not self.card_public_key or not self.server_public_key:
+            print("Keys not initialized. Please exchange keys first.")
+            return False
+
+        return self.send_fragmented_message(transaction_data)
 
 
 def is_success(sw1, sw2):
