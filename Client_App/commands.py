@@ -5,6 +5,7 @@ from io import BytesIO
 from typing import Tuple, Any
 
 import rsa
+from rsa.cli import encrypt
 
 from apdu import APDUHandler, APDU
 from card_configuration import *
@@ -303,12 +304,10 @@ class CardCommands:
         data = [c for c in message_bytes[:chunk_size]]
         apdu = APDU(APPLET_CLA, INS_FRAGMENT, 0x00, 0x00, data)  # P1=START, P2=RECEIVE
         response, sw1, sw2 = self.send_command(apdu)
-        print("First fragment")
         if not is_success(sw1, sw2):
             print("Failed to send first fragment")
             return None
 
-        # Send middle fragments
         pos = chunk_size
         while pos < len(message_bytes) - chunk_size:
             data = [c for c in message_bytes[pos:pos + chunk_size]]
@@ -320,7 +319,6 @@ class CardCommands:
 
             pos += chunk_size
 
-        # Send final fragment
         if pos < len(message_bytes):
             data = [c for c in message_bytes[pos:]]
             apdu = APDU(APPLET_CLA, INS_FRAGMENT, 0x02, 0x00, data)  # P1=FINAL
@@ -330,7 +328,6 @@ class CardCommands:
                 print("Failed to send final fragment")
                 return None
 
-        # Receive encrypted and signed response in fragments
         complete_response = []
 
         while True:
@@ -343,18 +340,15 @@ class CardCommands:
 
             complete_response.extend(response)
 
-            # Check if this was the last fragment
-            if len(response) < 128:  # Less than max chunk size means last fragment
+            if len(response) < 128:
                 break
 
-        # Parse the complete response
         encrypted_length = int.from_bytes(complete_response[:2], 'big')
         encrypted_data = complete_response[2:2 + encrypted_length]
         signature = complete_response[2 + encrypted_length:]
 
         print("Encrypted data:", encrypted_data)
-        print("Signature:", signature)
-        # Verify signature and send to server
+        print("Signature:", (signature))
         if not self.check_card_signature(encrypted_data, signature):
             print("Failed to verify card signature")
             return None
@@ -371,6 +365,119 @@ class CardCommands:
             return False
 
         return self.send_fragmented_message(transaction_data)
+
+    def get_logs_from_server(self):
+        """Récupère les logs du serveur pour cette carte"""
+        try:
+            if not self.trusted_server or not self.port:
+                print("Configuration serveur manquante. Exécutez get_server_ip() d'abord.")
+                return None
+
+            # Préparer la requête
+            request = {
+                'type': 'get_logs',
+                'client_id': 'card_' + str(id(self))
+            }
+
+            # Envoyer la requête au serveur
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((self.trusted_server, self.port))
+                s.send(json.dumps(request).encode())
+
+                # Recevoir la réponse
+                response = s.recv(4096)  # Buffer plus grand pour les logs
+                response_data = json.loads(response.decode())
+
+                if response_data['status'] == 'success':
+                    for log in response_data['logs']:
+                        # Décodage des données en base64
+                        log['encrypted_data'] = base64.b64decode(log['encrypted_data'])
+                        log['signature'] = base64.b64decode(log['signature'])
+                    print(f"Logs décodés: {response_data['logs']}")
+                    return response_data['logs']
+                else:
+                    print(f"Erreur serveur: {response_data.get('message', 'Erreur inconnue')}")
+                    return None
+
+        except Exception as e:
+            print(f"Erreur lors de la récupération des logs: {e}")
+            return None
+
+
+    def process_server_logs(self):
+        """Récupère et traite les logs du serveur"""
+        # Récupérer les logs du serveur
+        logs = self.get_logs_from_server()
+        if not logs:
+            print("Aucun log à traiter")
+            return []
+
+        decrypted_messages = []
+        for log_entry in logs:
+            try:
+                encrypted_data = log_entry['encrypted_data']
+                chunk_size = 12
+
+                # Premier fragment
+                data = [b for b in encrypted_data[:chunk_size]]
+                apdu = APDU(APPLET_CLA, INS_DECRYPT, 0x00, 0x00, data)  # P1=START, P2=RECEIVE
+                response, sw1, sw2 = self.send_command(apdu)
+                if not is_success(sw1, sw2):
+                    print(f"Échec de l'envoi du premier fragment pour le message du {log_entry['timestamp']}")
+                    continue
+
+                # Fragments du milieu
+                pos = chunk_size
+                while pos < len(encrypted_data) - chunk_size:
+                    data = [b for b in encrypted_data[pos:pos + chunk_size]]
+                    apdu = APDU(APPLET_CLA, INS_DECRYPT, 0x01, 0x00, data)  # P1=CONTINUE
+                    response, sw1, sw2 = self.send_command(apdu)
+                    if not is_success(sw1, sw2):
+                        print(f"Échec de l'envoi d'un fragment pour le message du {log_entry['timestamp']}")
+                        break
+                    pos += chunk_size
+
+                # Dernier fragment
+                if pos < len(encrypted_data):
+                    data = [b for b in encrypted_data[pos:]]
+                    print(data)
+                    apdu = APDU(APPLET_CLA, INS_DECRYPT, 0x02, 0x00, data)  # P1=FINAL
+                    response, sw1, sw2 = self.send_command(apdu)
+
+                    if not is_success(sw1, sw2):
+                        print(f"Échec de l'envoi du dernier fragment pour le message du {log_entry['timestamp']}")
+                        continue
+
+                # Récupérer le message déchiffré
+                decrypted_data = []
+                while True:
+                    apdu = APDU(APPLET_CLA, INS_DECRYPT, 0x00, 0x01)  # P2=SEND
+                    response, sw1, sw2 = self.send_command(apdu)
+
+                    if not is_success(sw1, sw2):
+                        print(f"Échec de la réception du message déchiffré du {log_entry['timestamp']}")
+                        break
+
+                    decrypted_data.extend(response)
+                    if len(response) < 128:  # Dernier fragment
+                        break
+
+                if decrypted_data:
+                    try:
+                        message = bytes(decrypted_data).decode(TEXT_ENCODING)
+                        decrypted_messages.append({
+                            'timestamp': log_entry['timestamp'],
+                            'message': message,
+                            'signature_verified': log_entry['signature_verified']
+                        })
+                    except UnicodeDecodeError:
+                        print(f"Erreur de décodage du message du {log_entry['timestamp']}")
+
+            except Exception as e:
+                print(f"Erreur lors du traitement du log du {log_entry['timestamp']}: {e}")
+                continue
+        print(f"Messages déchiffrés: {decrypted_messages}")
+        return decrypted_messages
 
 
 def is_success(sw1, sw2):

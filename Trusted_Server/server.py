@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import rsa
+from rsa.cli import encrypt
 
 from Trusted_Server.KeyManager import RSAKeyManager
 from Trusted_Server.TransactionLogger import TransactionLogger
@@ -134,7 +135,26 @@ class RSAServer:
                 print(f"Envoi de notre clé publique...")
                 client_socket.send(json.dumps(response).encode())
 
+            if message['type'] == 'get_logs':
+                client_id = message['client_id']
+                logs = self.transaction_logger.get_logs_for_client(client_id)
+                card_public_key = self.key_manager.get_public_key(client_id)
+                print(f"logs {logs}")
+                for log in logs:
+                    rsa.verify(base64.b64decode(log['encrypted_data']), base64.b64decode(log['signature']), card_public_key)
+                    decrypted_data = rsa.decrypt(base64.b64decode(log['encrypted_data']), self.private_key)
+                    signature = base64.b64decode(log['signature'].encode('utf-8'))
 
+                    encrypted_data = rsa.encrypt(decrypted_data, card_public_key)
+
+                    log['encrypted_data'] = base64.b64encode(encrypted_data).decode('utf-8')  # Encodage en base64
+                    log['signature'] = base64.b64encode(signature).decode('utf-8')  # Encodage en base64
+                print(f"logs {logs}")
+                response = {
+                    'status': 'success',
+                    'logs': logs
+                }
+                client_socket.send(json.dumps(response).encode())
 
         except Exception as e:
             print(f"Erreur lors du traitement du client: {e}")

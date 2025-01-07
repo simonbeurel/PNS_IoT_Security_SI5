@@ -16,8 +16,13 @@ def main():
     card.exchange_keys_with_server()
     card.verify_server_key()
 
-    card.send_fragmented_message("Hellaaaaaaaaaaaaegggggggggggggggggggggaaaaao World")
-
+    card.send_fragmented_message("Barre Proteiné")
+    card.send_fragmented_message("Canette Coca-Cola")
+    card.send_fragmented_message("Paquet de chips")
+    card.send_fragmented_message("Madeleine Bretonne")
+    card.send_fragmented_message("aaaaaaaaaaaaaaaaaaaaaaaaeefzdsdsqa")
+    card.send_fragmented_message("aaaaaaaaaaaaaaaaaaaaaaaaeefzdsdsqa")
+    card.process_server_logs()
     return 0
 
 if __name__ == '__main__':

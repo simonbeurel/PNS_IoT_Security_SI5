@@ -17,6 +17,21 @@ public class helloWorld extends Applet {
     private static final byte[] SERVER_IP = {0x7F, 0x00, 0x00, 0x01};
     private static final short SERVER_PORT = 12345;
 
+    // Add these fields to the JavaCard class
+    private static final short MAX_BUFFER_SIZE = 512;
+    private byte[] messageBuffer;
+    private short messageLength;
+    private boolean isReceiving;
+    private short currentOffset;
+
+
+    // Add new instruction
+    private static final byte INS_FRAGMENT_DATA = (byte) 0x08;
+    private static final byte P1_START = (byte) 0x00;
+    private static final byte P1_CONTINUE = (byte) 0x01;
+    private static final byte P1_FINAL = (byte) 0x02;
+    private static final byte P2_RECEIVE = (byte) 0x00;
+    private static final byte P2_SEND = (byte) 0x01;
 
     private KeyPair keyPair;
     private RSAPublicKey publicKey;
@@ -25,9 +40,8 @@ public class helloWorld extends Applet {
 
     OwnerPIN pin;
     private final static short SW_VERIFICATION_FAILED = 0x6300;
-    /*
-      On définit les constantes pour les différentes instructions
-    */
+
+    //On définit les constantes pour les différentes instructions
     private final static byte CLA = (byte) 0x00; // CLA
     private final static byte INS_LOGIN = (byte) 0x01; // Inscription
     private final static byte INS_MODIFY_PIN = (byte) 0x02; // Modification du PIN
@@ -36,10 +50,16 @@ public class helloWorld extends Applet {
     private final static byte INS_STORE_SERVER_KEY = (byte) 0x05; // Récupération et stockage de la clé publique du serveur
     private static final byte INS_VERIFY_SERVER_KEY = (byte) 0x06; // Vérification de la clé publique du serveur
     private static final byte INS_ENCRYPT_AND_SIGN  = (byte) 0x07; // Signature de données
-
-    private final static byte INS_TEST = (byte) 0x09; // Test
+    private static final byte INS_FRAGMENT  = (byte) 0x08;
+    private final static byte INS_TEST = (byte) 0x09;
+    private final static byte INS_DECRYPT = (byte) 0x0A;
 
     protected helloWorld() {
+        messageBuffer = new byte[MAX_BUFFER_SIZE];
+        messageLength = 0;
+        isReceiving = false;
+        currentOffset = 0;
+
         pin = new OwnerPIN(MAX_PIN_TRIES, PIN_LENGTH);
         pin.update(DEFAULT_PIN, (short) 0, PIN_LENGTH);
         generateRSAKeyPair();
@@ -59,8 +79,6 @@ public class helloWorld extends Applet {
         checkLogin();
         pin.reset();
     }
-
-
     private void generateRSAKeyPair() {
         keyPair = new KeyPair(KeyPair.ALG_RSA_CRT, (short) 512);
         keyPair.genKeyPair();
@@ -108,7 +126,24 @@ public class helloWorld extends Applet {
             case INS_ENCRYPT_AND_SIGN :
                 encryptAndSign(apdu);
                 break;
-
+            case INS_FRAGMENT:
+                if (buffer[ISO7816.OFFSET_P2] == P2_RECEIVE) {
+                    receiveFragment(apdu, INS_FRAGMENT);
+                } else if (buffer[ISO7816.OFFSET_P2] == P2_SEND) {
+                    sendFragment(apdu);
+                } else {
+                    ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
+                }
+                break;
+            case INS_DECRYPT:
+                if (buffer[ISO7816.OFFSET_P2] == P2_RECEIVE) {
+                    receiveFragment(apdu, INS_DECRYPT);
+                } else if (buffer[ISO7816.OFFSET_P2] == P2_SEND) {
+                    sendFragment(apdu);
+                } else {
+                    ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
+                }
+                break;
             default:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }
@@ -268,4 +303,195 @@ public class helloWorld extends Applet {
         apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA,
                 (short)(2 + encryptedLength + signatureLength));
     }
+
+    public void receiveFragment(APDU apdu, byte ins) {
+        checkLogin();
+
+        byte[] buffer = apdu.getBuffer();
+        byte p1 = buffer[ISO7816.OFFSET_P1];
+
+        // Start of new message
+        if (p1 == P1_START) {
+            messageLength = 0;
+            isReceiving = true;
+            currentOffset = 0;
+        }
+
+        // Verify we're in receiving state
+        if (!isReceiving) {
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        }
+
+        short len = apdu.setIncomingAndReceive();
+
+        // Check if buffer overflow would occur
+        if ((short)(messageLength + len) > MAX_BUFFER_SIZE) {
+            isReceiving = false;
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        // Copy fragment to buffer
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, messageBuffer, messageLength, len);
+        messageLength += len;
+
+        // If this is the final fragment, process the complete message
+        if (p1 == P1_FINAL) {
+            isReceiving = false;
+            if (ins == INS_FRAGMENT) {
+                processCompleteMessage(apdu);
+            } else {
+                decryptCompleteMessage();
+            }
+        }
+    }
+
+    private void processCompleteMessage(APDU apdu) {
+        // Create temporary buffer for encrypted data and signature
+        byte[] tempBuffer = new byte[256];
+
+        // 1. Encrypt the complete message
+        Cipher cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false);
+        cipher.init(serverPublicKey, Cipher.MODE_ENCRYPT);
+        short encryptedLength = cipher.doFinal(
+                messageBuffer, (short)0,
+                messageLength,
+                tempBuffer, (short)0
+        );
+
+        // 2. Sign the encrypted data
+        Signature sig = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
+        sig.init(privateKey, Signature.MODE_SIGN);
+
+        // Store encrypted length at start of buffer
+        Util.setShort(messageBuffer, (short)0, encryptedLength);
+
+        // Copy encrypted data after length
+        Util.arrayCopy(tempBuffer, (short)0,
+                messageBuffer, (short)2,
+                encryptedLength);
+
+        // Add signature after encrypted data
+        short signatureLength = sig.sign(
+                messageBuffer, (short)2,
+                encryptedLength,
+                messageBuffer, (short)(2 + encryptedLength)
+        );
+
+        // Store total message length for sending
+        messageLength = (short)(2 + encryptedLength + signatureLength);
+        currentOffset = 0;
+    }
+
+    public void sendFragment(APDU apdu) {
+        checkLogin();
+
+        byte[] buffer = apdu.getBuffer();
+        short maxChunkSize = 128; // Maximum size that can fit in APDU
+
+        short remainingBytes = (short)(messageLength - currentOffset);
+        short chunkSize = (remainingBytes > maxChunkSize) ? maxChunkSize : remainingBytes;
+
+        Util.arrayCopy(messageBuffer, currentOffset,
+                buffer, ISO7816.OFFSET_CDATA,
+                chunkSize);
+
+        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, chunkSize);
+        currentOffset += chunkSize;
+
+        // If all data has been sent, reset buffer
+        if (currentOffset >= messageLength) {
+            messageLength = 0;
+            currentOffset = 0;
+        }
+    }
+
+    private void receiveFragmentForDecryption(APDU apdu) {
+        checkLogin();
+
+        byte[] buffer = apdu.getBuffer();
+        byte p1 = buffer[ISO7816.OFFSET_P1];
+
+        // Début d'un nouveau message
+        if (p1 == P1_START) {
+            messageLength = 0;
+            isReceiving = true;
+            currentOffset = 0;
+        }
+
+        if (!isReceiving) {
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        }
+
+        short len = apdu.setIncomingAndReceive();
+
+        // Vérifier le dépassement de buffer
+        if ((short)(messageLength + len) > MAX_BUFFER_SIZE) {
+            isReceiving = false;
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        // Copier le fragment dans le buffer
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, messageBuffer, messageLength, len);
+        messageLength += len;
+
+        // Si c'est le dernier fragment, déchiffrer le message complet
+        if (p1 == P1_FINAL) {
+            isReceiving = false;
+            decryptCompleteMessage();
+        }
+    }
+
+    private void decryptCompleteMessage() {
+        try {
+            // Créer un buffer temporaire pour le déchiffrement
+            byte[] tempBuffer = new byte[256];
+
+            // Déchiffrer avec notre clé privée
+            Cipher cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false);
+            cipher.init(privateKey, Cipher.MODE_DECRYPT);
+
+            // Le message reçu contient les données chiffrées
+            short decryptedLength = cipher.doFinal(
+                    messageBuffer, (short)0,
+                    messageLength,
+                    tempBuffer, (short)0
+            );
+
+            // Copier le résultat déchiffré dans le buffer de message
+            Util.arrayCopy(tempBuffer, (short)0,
+                    messageBuffer, (short)0,
+                    decryptedLength);
+
+            messageLength = decryptedLength;
+            currentOffset = 0;
+
+        } catch (Exception e) {
+            ISOException.throwIt(ISO7816.SW_UNKNOWN);
+        }
+    }
+
+    private void sendDecryptedFragment(APDU apdu) {
+        checkLogin();
+
+        byte[] buffer = apdu.getBuffer();
+        short maxChunkSize = 128; // Taille maximum qui peut tenir dans un APDU
+
+        short remainingBytes = (short)(messageLength - currentOffset);
+        short chunkSize = (remainingBytes > maxChunkSize) ? maxChunkSize : remainingBytes;
+
+        // Copier le fragment dans le buffer de réponse
+        Util.arrayCopy(messageBuffer, currentOffset,
+                buffer, ISO7816.OFFSET_CDATA,
+                chunkSize);
+
+        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, chunkSize);
+        currentOffset += chunkSize;
+
+        // Si toutes les données ont été envoyées, réinitialiser le buffer
+        if (currentOffset >= messageLength) {
+            messageLength = 0;
+            currentOffset = 0;
+        }
+    }
+
 }
