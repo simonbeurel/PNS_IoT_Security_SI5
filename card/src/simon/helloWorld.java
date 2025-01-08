@@ -405,42 +405,6 @@ public class helloWorld extends Applet {
         }
     }
 
-    private void receiveFragmentForDecryption(APDU apdu) {
-        checkLogin();
-
-        byte[] buffer = apdu.getBuffer();
-        byte p1 = buffer[ISO7816.OFFSET_P1];
-
-        // Début d'un nouveau message
-        if (p1 == P1_START) {
-            messageLength = 0;
-            isReceiving = true;
-            currentOffset = 0;
-        }
-
-        if (!isReceiving) {
-            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
-        }
-
-        short len = apdu.setIncomingAndReceive();
-
-        // Vérifier le dépassement de buffer
-        if ((short)(messageLength + len) > MAX_BUFFER_SIZE) {
-            isReceiving = false;
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        }
-
-        // Copier le fragment dans le buffer
-        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, messageBuffer, messageLength, len);
-        messageLength += len;
-
-        // Si c'est le dernier fragment, déchiffrer le message complet
-        if (p1 == P1_FINAL) {
-            isReceiving = false;
-            decryptCompleteMessage();
-        }
-    }
-
     private void decryptCompleteMessage() {
         try {
             // Créer un buffer temporaire pour le déchiffrement
@@ -469,29 +433,5 @@ public class helloWorld extends Applet {
             ISOException.throwIt(ISO7816.SW_UNKNOWN);
         }
     }
-
-    private void sendDecryptedFragment(APDU apdu) {
-        checkLogin();
-
-        byte[] buffer = apdu.getBuffer();
-        short maxChunkSize = 128; // Taille maximum qui peut tenir dans un APDU
-
-        short remainingBytes = (short)(messageLength - currentOffset);
-        short chunkSize = (remainingBytes > maxChunkSize) ? maxChunkSize : remainingBytes;
-
-        // Copier le fragment dans le buffer de réponse
-        Util.arrayCopy(messageBuffer, currentOffset,
-                buffer, ISO7816.OFFSET_CDATA,
-                chunkSize);
-
-        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, chunkSize);
-        currentOffset += chunkSize;
-
-        // Si toutes les données ont été envoyées, réinitialiser le buffer
-        if (currentOffset >= messageLength) {
-            messageLength = 0;
-            currentOffset = 0;
-        }
-    }
-
+    
 }
