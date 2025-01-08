@@ -4,7 +4,10 @@ from smartcard.util import toHexString, toBytes
 from card_configuration import INS_LOGIN
 from reader import SmartCardReader
 
+# Client file
+
 def main():
+    """Initialise la connexion avec la carte"""
     reader = SmartCardReader()
     card = reader.get_card_connection()
 
@@ -16,6 +19,7 @@ def main():
     card.exchange_keys_with_server()
     card.verify_server_key()
 
+    """Envoie des différents produits à la carte"""
     card.send_fragmented_message("Barre Proteiné")
     card.send_fragmented_message("Canette Coca-Cola")
     card.send_fragmented_message("Paquet de chips")
