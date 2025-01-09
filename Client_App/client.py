@@ -1,8 +1,7 @@
-from smartcard.System import readers
-from smartcard.util import toHexString, toBytes
 
-from card_configuration import INS_LOGIN
-from reader import SmartCardReader
+'''
+Ce fichier peut etre utilisé pour tester manuellement les fonctionnalité du projet
+'''
 
 # Client file
 
@@ -27,6 +26,7 @@ def main():
     card.send_fragmented_message("aaaaaaaaaaaaaaaaaaaaaaaaeefzdsdsqa")
     card.send_fragmented_message("aaaaaaaaaaaaaaaaaaaaaaaaeefzdsdsqa")
     card.process_server_logs()
+
     return 0
 
 if __name__ == '__main__':
