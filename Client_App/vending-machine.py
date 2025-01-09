@@ -194,6 +194,10 @@ class VendingMachine:
 
 def main():
     vending_machine = VendingMachine()
+    # si on a pas de carte connectée, on ne peut pas continuer
+    if vending_machine.card is None:
+        print("Aucune carte connectée! Veuillez brancher une carte et réessayer.")
+        return 1
     vending_machine.run()
 
 

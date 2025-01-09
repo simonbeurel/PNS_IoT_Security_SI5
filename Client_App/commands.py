@@ -42,7 +42,6 @@ class CardCommands:
         data = [int(digit) for digit in pin_code]
         apdu = APDU(APPLET_CLA, INS_LOGIN,0,0, data)
         response, sw1, sw2 = self.send_command(apdu)
-        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
         if is_success(sw1,sw2):
             return True
         else:
@@ -57,7 +56,6 @@ class CardCommands:
         apdu = APDU(APPLET_CLA, INS_MODIFY_PIN, 0, 0, data)
 
         response, sw1, sw2 = self.send_command(apdu)
-        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
         if is_success(sw1, sw2):
             print("Modification réussie")
         else:
@@ -155,7 +153,6 @@ class CardCommands:
         # Envoyer l'APDU pour stocker la clé
         apdu = APDU(APPLET_CLA, INS_STORE_SERVER_KEY, 0, 0, data)
         response, sw1, sw2 = self.send_command(apdu)
-        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
         if is_success(sw1, sw2):
             return True
         else:
@@ -193,13 +190,8 @@ class CardCommands:
         """Vérifie que la clé du serveur est correctement stockée sur la JavaCard"""
         apdu = APDU(APPLET_CLA, INS_VERIFY_SERVER_KEY, 0, 0)
         response, sw1, sw2 = self.send_command(apdu)
-        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
         if is_success(sw1, sw2):
-            print("Vérification de la clé serveur réussie")
             e, n = deserialize_e_n(response)
-            print(f"Clé stockée sur la carte:")
-            print(f"e: {e}")
-            print(f"n: {n}")
             # Vérifier que la clé correspond à celle du serveur
             if self.server_public_key:
                 if e == self.server_public_key.e and n == self.server_public_key.n:
@@ -210,37 +202,6 @@ class CardCommands:
         else:
             print("Vérification de la clé serveur échouée")
             return None
-
-    def secure_transaction(self, transaction_data):
-        """
-        Chiffre et signe les données de transaction en une seule opération
-        """
-        transaction_data_encoded = transaction_data.encode(TEXT_ENCODING)
-        data = [c for c in transaction_data_encoded]
-
-        apdu = APDU(APPLET_CLA, INS_ENCRYPT_AND_SIGN, 0, 0, data)
-        response, sw1, sw2 = self.send_command(apdu)
-
-        if not is_success(sw1, sw2):
-            print("Échec de la transaction sécurisée")
-            return None
-
-        # Extraire les différentes parties de la réponse
-        encrypted_length = int.from_bytes(response[:2], 'big')
-        encrypted_data = response[2:2 + encrypted_length]
-        signature = response[2 + encrypted_length:]
-
-        print(f"encrypted_data: {encrypted_data}")
-        print(f"signature: {signature}")
-
-        # Verifier la signature de la carte
-        if not self.check_card_signature(encrypted_data, signature):
-            print("Échec de la vérification de la signature de la carte")
-            return False
-
-        print("Signature de la carte vérifiée avec succès")
-        success = self.send_transaction_to_server(encrypted_data, signature)
-        return success
 
     def check_card_signature(self, encrypted_data, signature):
         """Vérifie la signature de la carte"""
@@ -393,7 +354,6 @@ class CardCommands:
             print(f"Erreur lors de la récupération des logs: {e}")
             return None
 
-
     def process_server_logs(self):
         """Récupère et traite les logs du serveur"""
         # Récupérer les logs du serveur
@@ -470,15 +430,6 @@ class CardCommands:
 
 def is_success(sw1, sw2):
     success = (sw1 == 0x90 and sw2 == 0x00)
-
-    if not success:
-        import inspect
-        import os
-        file_path = inspect.stack()[1].filename
-        file_name = os.path.basename(file_path)
-        caller = inspect.stack()[1].function
-        line_no = inspect.stack()[1].lineno
-        print(f"Error from file {file_name} in function \"{caller}\" at line {line_no}")
     return success
 
 def deserialize_e_n(data):
@@ -487,3 +438,36 @@ def deserialize_e_n(data):
     len_n = int.from_bytes(data[2 + len_e:2 + len_e + 2], "big")
     n = int.from_bytes(data[2 + len_e + 2:2 + len_e + 2 + len_n], "big")
     return e, n
+
+'''
+    def secure_transaction(self, transaction_data):
+        """
+        Chiffre et signe les données de transaction en une seule opération
+        """
+        transaction_data_encoded = transaction_data.encode(TEXT_ENCODING)
+        data = [c for c in transaction_data_encoded]
+
+        apdu = APDU(APPLET_CLA, INS_ENCRYPT_AND_SIGN, 0, 0, data)
+        response, sw1, sw2 = self.send_command(apdu)
+
+        if not is_success(sw1, sw2):
+            print("Échec de la transaction sécurisée")
+            return None
+
+        # Extraire les différentes parties de la réponse
+        encrypted_length = int.from_bytes(response[:2], 'big')
+        encrypted_data = response[2:2 + encrypted_length]
+        signature = response[2 + encrypted_length:]
+
+        print(f"encrypted_data: {encrypted_data}")
+        print(f"signature: {signature}")
+
+        # Verifier la signature de la carte
+        if not self.check_card_signature(encrypted_data, signature):
+            print("Échec de la vérification de la signature de la carte")
+            return False
+
+        print("Signature de la carte vérifiée avec succès")
+        success = self.send_transaction_to_server(encrypted_data, signature)
+        return success
+'''
