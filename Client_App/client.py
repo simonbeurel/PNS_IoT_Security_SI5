@@ -18,8 +18,7 @@ def main():
 
     card.get_server_ip()
     card.exchange_keys_with_server()
-    card.verify_server_key()
-
+    e, n = card.verify_server_key()
     """Envoie des différents produits à la carte"""
     card.send_fragmented_message("Barre Proteiné")
     card.process_server_logs()
