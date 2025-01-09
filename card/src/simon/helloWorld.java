@@ -55,6 +55,7 @@ public class helloWorld extends Applet {
     private final static byte INS_DECRYPT = (byte) 0x0A;
 
     protected helloWorld() {
+        // Initialise les champs et génère une paire de clés RSA.
         messageBuffer = new byte[MAX_BUFFER_SIZE];
         messageLength = 0;
         isReceiving = false;
@@ -68,10 +69,12 @@ public class helloWorld extends Applet {
 
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
+        // Installe l'applet sur la carte.
         new helloWorld();
     }
 
     public boolean select() {
+        // Vérifie si l'applet peut être sélectionné.
         return pin.getTriesRemaining() != 0;
     }
 
@@ -80,6 +83,7 @@ public class helloWorld extends Applet {
         pin.reset();
     }
     private void generateRSAKeyPair() {
+        // Génère une paire de clés RSA.
         keyPair = new KeyPair(KeyPair.ALG_RSA_CRT, (short) 512);
         keyPair.genKeyPair();
         publicKey = (RSAPublicKey) keyPair.getPublic();
@@ -88,6 +92,7 @@ public class helloWorld extends Applet {
 
 
     public void process(APDU apdu) {
+        // Traite une commande APDU reçue.
         if (selectingApplet()) {
             ISOException.throwIt(ISO7816.SW_NO_ERROR);
         }
@@ -156,6 +161,7 @@ public class helloWorld extends Applet {
     }
 
     private void login(APDU apdu) {
+        // Vérifie le PIN envoyé par l'utilisateur.
         byte[] buffer = apdu.getBuffer();
         if((short) (buffer[ISO7816.OFFSET_LC] & 0x00FF)==PIN_LENGTH) {
             apdu.setIncomingAndReceive();
@@ -166,12 +172,14 @@ public class helloWorld extends Applet {
     }
 
     private void checkLogin() {
+        // Vérifie si l'utilisateur est authentifié.
         if (!pin.isValidated()) {
             ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         }
     }
 
     private void modifyPin(APDU apdu) {
+        // Modifie le PIN de l'utilisateur.
         checkLogin();
         byte[] buffer = apdu.getBuffer();
         apdu.setIncomingAndReceive();
@@ -193,6 +201,7 @@ public class helloWorld extends Applet {
     }
 
     private void sendPublicKey(APDU apdu) {
+        // Envoie la clé publique au client.
         checkLogin();
         byte[] buffer = apdu.getBuffer();
         short len = serializeKey(publicKey, buffer, ISO7816.OFFSET_CDATA);
@@ -200,6 +209,7 @@ public class helloWorld extends Applet {
     }
 
     private void storeServerKey(APDU apdu) {
+        // Stocke la clé publique reçue du serveur.
         checkLogin();
         byte[] buffer = apdu.getBuffer();
         short len = apdu.setIncomingAndReceive();
@@ -247,6 +257,7 @@ public class helloWorld extends Applet {
     }
 
     private void verifyServerKey(APDU apdu) {
+        // Vérifie la clé publique du serveur.
         checkLogin();
 
         if (serverPublicKey == null) {
@@ -259,6 +270,7 @@ public class helloWorld extends Applet {
     }
 
     private void encryptAndSign(APDU apdu) {
+        // Chiffre et signe des données avant de les envoyer.
         checkLogin();
 
         if (serverPublicKey == null) {
@@ -305,6 +317,7 @@ public class helloWorld extends Applet {
     }
 
     public void receiveFragment(APDU apdu, byte ins) {
+        // Reçoit et traite des fragments de données.
         checkLogin();
 
         byte[] buffer = apdu.getBuffer();
@@ -383,6 +396,7 @@ public class helloWorld extends Applet {
     }
 
     public void sendFragment(APDU apdu) {
+        // Envoie un fragment de message au client.
         checkLogin();
 
         byte[] buffer = apdu.getBuffer();
@@ -405,7 +419,47 @@ public class helloWorld extends Applet {
         }
     }
 
+
+    private void receiveFragmentForDecryption(APDU apdu) {
+        // Reçoit un fragment de données pour déchiffrement.
+        checkLogin();
+
+        byte[] buffer = apdu.getBuffer();
+        byte p1 = buffer[ISO7816.OFFSET_P1];
+
+        // Début d'un nouveau message
+        if (p1 == P1_START) {
+            messageLength = 0;
+            isReceiving = true;
+            currentOffset = 0;
+        }
+
+        if (!isReceiving) {
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        }
+
+        short len = apdu.setIncomingAndReceive();
+
+        // Vérifier le dépassement de buffer
+        if ((short)(messageLength + len) > MAX_BUFFER_SIZE) {
+            isReceiving = false;
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        // Copier le fragment dans le buffer
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, messageBuffer, messageLength, len);
+        messageLength += len;
+
+        // Si c'est le dernier fragment, déchiffrer le message complet
+        if (p1 == P1_FINAL) {
+            isReceiving = false;
+            decryptCompleteMessage();
+        }
+    }
+
+
     private void decryptCompleteMessage() {
+        // Déchiffre un message complet.
         try {
             // Créer un buffer temporaire pour le déchiffrement
             byte[] tempBuffer = new byte[256];
@@ -433,5 +487,30 @@ public class helloWorld extends Applet {
             ISOException.throwIt(ISO7816.SW_UNKNOWN);
         }
     }
-    
+
+    private void sendDecryptedFragment(APDU apdu) {
+        // Envoie un fragment de message déchiffré.
+        checkLogin();
+
+        byte[] buffer = apdu.getBuffer();
+        short maxChunkSize = 128; // Taille maximum qui peut tenir dans un APDU
+
+        short remainingBytes = (short)(messageLength - currentOffset);
+        short chunkSize = (remainingBytes > maxChunkSize) ? maxChunkSize : remainingBytes;
+
+        // Copier le fragment dans le buffer de réponse
+        Util.arrayCopy(messageBuffer, currentOffset,
+                buffer, ISO7816.OFFSET_CDATA,
+                chunkSize);
+
+        apdu.setOutgoingAndSend(ISO7816.OFFSET_CDATA, chunkSize);
+        currentOffset += chunkSize;
+
+        // Si toutes les données ont été envoyées, réinitialiser le buffer
+        if (currentOffset >= messageLength) {
+            messageLength = 0;
+            currentOffset = 0;
+        }
+    }
+
 }

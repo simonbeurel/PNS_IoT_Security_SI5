@@ -11,6 +11,7 @@ def is_success(sw1, sw2):
     if (sw1, sw2) == (0x90, 0x00):
         return True
 
+# Classe permettant de gérer un lecteur de carte et d'établir une connexion avec une carte 
 class SmartCardReader:
     def __init__(self):
         self.reader = None
@@ -18,6 +19,11 @@ class SmartCardReader:
         self.card = None
 
     def get_card_connection(self) -> CardCommands:
+        """
+        Tente de se connecter à une carte insérée dans un lecteur disponible.
+        Sélectionne un applet spécifique sur la carte si une connexion est établie avec succès.
+        Retourne un objet CardCommands permettant d'envoyer des commandes à la carte.
+        """
         if not readers():
             print("No readers")
             return None
@@ -43,5 +49,8 @@ class SmartCardReader:
                 return None
 
 def apdu_select_applet(applet_aid):
+    """
+    Crée une commande APDU pour sélectionner un applet sur la carte.
+    """
     apdu = APDU(0x00, 0xa4, 0x04, 0x00, applet_aid)
     return apdu

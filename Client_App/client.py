@@ -3,7 +3,29 @@
 Ce fichier peut etre utilisé pour tester manuellement les fonctionnalité du projet
 '''
 
+# Client file
+
 def main():
+    """Initialise la connexion avec la carte"""
+    reader = SmartCardReader()
+    card = reader.get_card_connection()
+
+    print("Card connected and applet selected")
+    card.test()
+    card.login("1234")
+
+    card.get_server_ip()
+    card.exchange_keys_with_server()
+    card.verify_server_key()
+
+    """Envoie des différents produits à la carte"""
+    card.send_fragmented_message("Barre Proteiné")
+    card.send_fragmented_message("Canette Coca-Cola")
+    card.send_fragmented_message("Paquet de chips")
+    card.send_fragmented_message("Madeleine Bretonne")
+    card.send_fragmented_message("aaaaaaaaaaaaaaaaaaaaaaaaeefzdsdsqa")
+    card.send_fragmented_message("aaaaaaaaaaaaaaaaaaaaaaaaeefzdsdsqa")
+    card.process_server_logs()
 
     return 0
 

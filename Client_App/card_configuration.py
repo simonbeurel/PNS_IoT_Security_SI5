@@ -1,6 +1,10 @@
 # Constantes APDU
 from smartcard.util import toBytes
 
+"""
+Set-up de variables nécessaires pour la carte
+"""
+
 APPLET_CLA = 0x00
 PIN_SIZE = 4
 APPLET_AID = toBytes("a0404142434445461001")
