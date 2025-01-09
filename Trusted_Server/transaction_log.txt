@@ -1,1 +1,0 @@
-{"timestamp": "2025-01-10 00:07:30", "client_id": "card_1919824045072", "encrypted_data": "JK7AsXeNczJOaK2IdXKSXXcAyaHRL2UCz8JH9F7MRNNew9MUpMmh0PRQYH6gQxnP6fzzXcMbDM+N3NCz/oNrCg==", "signature": "Evblxow7qp4a8yuns0uq1Sk1Tto5wtfwsrI2bWU9uYIUlcnrBQXH/YvknKt4DaVaZ3NhDJOkGD9q+lL8L5lmMw==", "signature_verified": true}
