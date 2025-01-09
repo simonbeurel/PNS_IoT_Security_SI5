@@ -5,7 +5,7 @@ import javacard.security.*;
 import javacardx.crypto.Cipher;
 
 
-public class helloWorld extends Applet {
+public class HelloWorld extends Applet {
 
     private final static byte[] hello=
             {0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x72, 0x6f, 0x62, 0x65, 0x72, 0x74} ;
@@ -54,7 +54,7 @@ public class helloWorld extends Applet {
     private final static byte INS_TEST = (byte) 0x09;
     private final static byte INS_DECRYPT = (byte) 0x0A;
 
-    protected helloWorld() {
+    protected HelloWorld() {
         // Initialise les champs et génère une paire de clés RSA.
         messageBuffer = new byte[MAX_BUFFER_SIZE];
         messageLength = 0;
@@ -70,7 +70,7 @@ public class helloWorld extends Applet {
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
         // Installe l'applet sur la carte.
-        new helloWorld();
+        new HelloWorld();
     }
 
     public boolean select() {

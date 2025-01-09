@@ -10,25 +10,25 @@
     </target>
 
     <target name="convert.all" depends="compile.all">
-        <convert_applet APPLETNAME="helloWorld" APPLETAID="${APPLETAIDPREFIX}:0x10:0x01"
+        <convert_applet APPLETNAME="HelloWorld" APPLETAID="${APPLETAIDPREFIX}:0x10:0x01"
                         PACKAGENAME="simon" PACKAGEAID="${APPLETAIDPREFIX}:0x10" VERSION="1.0"/>
     </target>
 
     <target name="generatecap.all" depends="convert.all">
-        <generate_cap PACKAGENAMEUNPACKAGED="simon" APPLETNAME="helloWorld"/>
+        <generate_cap PACKAGENAMEUNPACKAGED="simon" APPLETNAME="HelloWorld"/>
     </target>
 
     <target name="verifycap.all" depends="generatecap.all">
-        <verify_cap PACKAGENAMEUNPACKAGED="simon" APPLETNAME="helloWorld"
-                    ADDEXPFILES="${OUTPUT_DIR}/simon/javacard/helloWorld.exp"/>
+        <verify_cap PACKAGENAMEUNPACKAGED="simon" APPLETNAME="HelloWorld"
+                    ADDEXPFILES="${OUTPUT_DIR}/simon/javacard/HelloWorld.exp"/>
     </target>
 
     <target name="binarize.all.standard" depends="verifycap.all">
-        <generate_applet_bin_std PACKAGENAMEUNPACKAGED="simon" APPLETNAME="helloWorld"/>
+        <generate_applet_bin_std PACKAGENAMEUNPACKAGED="simon" APPLETNAME="HelloWorld"/>
     </target>
 
     <target name="binarize.all.egate" depends="verifycap.all">
-        <generate_applet_bin_egate PACKAGENAMEUNPACKAGED="simon" MODULENAME="helloWorld"/>
+        <generate_applet_bin_egate PACKAGENAMEUNPACKAGED="simon" MODULENAME="HelloWorld"/>
     </target>
 
     <!-- ======================================================== -->

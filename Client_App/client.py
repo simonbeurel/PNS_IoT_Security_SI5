@@ -2,6 +2,8 @@
 '''
 Ce fichier peut etre utilisé pour tester manuellement les fonctionnalité du projet
 '''
+from reader import SmartCardReader
+
 
 # Client file
 
@@ -20,11 +22,6 @@ def main():
 
     """Envoie des différents produits à la carte"""
     card.send_fragmented_message("Barre Proteiné")
-    card.send_fragmented_message("Canette Coca-Cola")
-    card.send_fragmented_message("Paquet de chips")
-    card.send_fragmented_message("Madeleine Bretonne")
-    card.send_fragmented_message("aaaaaaaaaaaaaaaaaaaaaaaaeefzdsdsqa")
-    card.send_fragmented_message("aaaaaaaaaaaaaaaaaaaaaaaaeefzdsdsqa")
     card.process_server_logs()
 
     return 0
