@@ -3,10 +3,8 @@ import json
 import signal
 import socket
 import sys
-from pathlib import Path
 
 import rsa
-from rsa.cli import encrypt
 
 from Trusted_Server.KeyManager import RSAKeyManager
 from Trusted_Server.TransactionLogger import TransactionLogger

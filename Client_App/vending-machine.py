@@ -1,7 +1,4 @@
-from smartcard.System import readers
-from smartcard.util import toHexString, toBytes
 import os
-from card_configuration import INS_LOGIN
 from reader import SmartCardReader
 
 

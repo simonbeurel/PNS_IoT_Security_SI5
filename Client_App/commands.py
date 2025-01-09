@@ -2,10 +2,9 @@ import base64
 import json
 import socket
 from io import BytesIO
-from typing import Tuple, Any
+from typing import Tuple
 
 import rsa
-from rsa.cli import encrypt
 
 from apdu import APDUHandler, APDU
 from card_configuration import *
