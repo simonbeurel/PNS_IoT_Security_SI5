@@ -44,10 +44,9 @@ class CardCommands:
         response, sw1, sw2 = self.send_command(apdu)
         print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
         if is_success(sw1,sw2):
-            print("Connexion réussie")
+            return True
         else:
-            print("Connexion échoué")
-        return response
+            return False
 
     def modify_pin(self, new_pin):
         if len(new_pin) != PIN_SIZE:
@@ -69,12 +68,9 @@ class CardCommands:
     def get_public_key(self):
         apdu = APDU(APPLET_CLA, INS_SEND_PUBLIC_KEY, 0, 0)
         response, sw1, sw2 = self.send_command(apdu)
-        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
         if is_success(sw1, sw2):
             print("Récupération de la clé publique réussie")
             e, n = deserialize_e_n(response)
-            print(f"e: {e}")
-            print(f"n: {n}")
             return e, n
         else:
             print("Récupération de la clé publique échouée")
@@ -82,7 +78,6 @@ class CardCommands:
     def get_server_ip(self):
         apdu = APDU(APPLET_CLA, INS_GET_SERVER_IP, 0, 0)
         response, sw1, sw2 = self.send_command(apdu)
-        print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
         if is_success(sw1, sw2):
             print("Récupération de l'adresse IP et du port du serveur réussie")
             ip = ".".join([str(byte) for byte in response[:4]])
@@ -323,7 +318,6 @@ class CardCommands:
             data = [c for c in message_bytes[pos:]]
             apdu = APDU(APPLET_CLA, INS_FRAGMENT, 0x02, 0x00, data)  # P1=FINAL
             response, sw1, sw2 = self.send_command(apdu)
-            print(f'sw1: {sw1:02X}, sw2: {sw2:02X}')
             if not is_success(sw1, sw2):
                 print("Failed to send final fragment")
                 return None
@@ -347,8 +341,6 @@ class CardCommands:
         encrypted_data = complete_response[2:2 + encrypted_length]
         signature = complete_response[2 + encrypted_length:]
 
-        print("Encrypted data:", encrypted_data)
-        print("Signature:", (signature))
         if not self.check_card_signature(encrypted_data, signature):
             print("Failed to verify card signature")
             return None
@@ -390,10 +382,8 @@ class CardCommands:
 
                 if response_data['status'] == 'success':
                     for log in response_data['logs']:
-                        # Décodage des données en base64
                         log['encrypted_data'] = base64.b64decode(log['encrypted_data'])
                         log['signature'] = base64.b64decode(log['signature'])
-                    print(f"Logs décodés: {response_data['logs']}")
                     return response_data['logs']
                 else:
                     print(f"Erreur serveur: {response_data.get('message', 'Erreur inconnue')}")
@@ -440,7 +430,6 @@ class CardCommands:
                 # Dernier fragment
                 if pos < len(encrypted_data):
                     data = [b for b in encrypted_data[pos:]]
-                    print(data)
                     apdu = APDU(APPLET_CLA, INS_DECRYPT, 0x02, 0x00, data)  # P1=FINAL
                     response, sw1, sw2 = self.send_command(apdu)
 
@@ -476,7 +465,6 @@ class CardCommands:
             except Exception as e:
                 print(f"Erreur lors du traitement du log du {log_entry['timestamp']}: {e}")
                 continue
-        print(f"Messages déchiffrés: {decrypted_messages}")
         return decrypted_messages
 
 

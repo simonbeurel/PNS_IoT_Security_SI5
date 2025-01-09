@@ -419,6 +419,7 @@ public class helloWorld extends Applet {
         }
     }
 
+
     private void receiveFragmentForDecryption(APDU apdu) {
         // Reçoit un fragment de données pour déchiffrement.
         checkLogin();
@@ -455,6 +456,7 @@ public class helloWorld extends Applet {
             decryptCompleteMessage();
         }
     }
+
 
     private void decryptCompleteMessage() {
         // Déchiffre un message complet.

@@ -108,8 +108,6 @@ class RSAServer:
                 return
 
             message = json.loads(data.decode())
-            print(f"Message reçu: {message}")
-
             if message['type'] == 'transaction':
                 response = self.handle_transaction(message)
                 client_socket.send(json.dumps(response).encode())
@@ -149,7 +147,6 @@ class RSAServer:
 
                     log['encrypted_data'] = base64.b64encode(encrypted_data).decode('utf-8')  # Encodage en base64
                     log['signature'] = base64.b64encode(signature).decode('utf-8')  # Encodage en base64
-                print(f"logs {logs}")
                 response = {
                     'status': 'success',
                     'logs': logs

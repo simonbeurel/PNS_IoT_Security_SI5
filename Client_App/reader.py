@@ -36,12 +36,8 @@ class SmartCardReader:
                     return
 
                 card = CardCommands(connection)
-                print("Selecting applet")
-                print(APPLET_AID)
                 response, sw1, sw2 = card.send_command(apdu_select_applet(APPLET_AID))
 
-
-                print(f"sw1: {sw1:02X}, sw2: {sw2:02X}")
                 if is_success(sw1, sw2):
                     self.reader = reader
                     self.connection = connection
@@ -57,5 +53,4 @@ def apdu_select_applet(applet_aid):
     Crée une commande APDU pour sélectionner un applet sur la carte.
     """
     apdu = APDU(0x00, 0xa4, 0x04, 0x00, applet_aid)
-    print(toHexString(apdu.get_apdu()))
     return apdu
