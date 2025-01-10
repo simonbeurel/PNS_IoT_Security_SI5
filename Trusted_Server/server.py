@@ -6,8 +6,8 @@ import sys
 
 import rsa
 
-from Trusted_Server.KeyManager import RSAKeyManager
-from Trusted_Server.TransactionLogger import TransactionLogger
+from KeyManager import RSAKeyManager
+from TransactionLogger import TransactionLogger
 
 
 class RSAServer:
