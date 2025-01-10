@@ -1,1 +1,1 @@
-cryptography
+rsa~=4.9
